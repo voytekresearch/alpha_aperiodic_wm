@@ -2,18 +2,19 @@
 (https://osf.io/bwzfj/)"""
 
 # Import necessary modules
-import os 
+import os.path
 import mne
 from mne.externals.pymatreader import read_mat
-from params import *
+import params
 
 
 def load_eeg_one_subj(
-    subj, data_dir=DATA_DIR, eeg_dir=EEG_DIR, exp_num=EXP_NUM):
+    subj, data_dir=params.DATA_DIR, eeg_dir=params.EEG_DIR, 
+    exp_num=params.EXP_NUM):
     """Load EEG data for one subject."""
     # Load data from MAT file
-    eeg_mat_fname = os.path.join(data_dir, 'exp{}'.format(
-        exp_num), eeg_dir, '{}_EEG.mat'.format(subj))
+    eeg_mat_fname = os.path.join(
+        data_dir, f'exp{exp_num}', eeg_dir, f'{subj}_EEG.mat')
     eeg_data = read_mat(eeg_mat_fname)['eeg']
 
     # Create epochs array from loaded MAT file
@@ -26,11 +27,12 @@ def load_eeg_one_subj(
     return epochs
 
 
-def load_beh_data_one_subj(subj, eeg_data, data_dir=DATA_DIR, exp_num=EXP_NUM):
-    """Load behavioral data for one subject"""
+def load_beh_data_one_subj(
+    subj, eeg_data, data_dir=params.DATA_DIR, exp_num=params.EXP_NUM):
+    """Load behavioral data for one subject."""
     # Load data from MAT file
-    beh_mat_fname = os.path.join(data_dir, 'exp{}'.format(
-        exp_num), 'Data', '{}_MixModel_wBias.mat'.format(subj))
+    beh_mat_fname = os.path.join(
+        data_dir, f'exp{exp_num}', 'Data', f'{subj}_MixModel_wBias.mat')
     beh_data = read_mat(beh_mat_fname)['beh']['trial']
 
     # Remove trials with artifacts

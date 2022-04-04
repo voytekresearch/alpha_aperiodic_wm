@@ -8,7 +8,7 @@ DATA_DIR = '../data/from_osf'
 EEG_DIR = 'EEG'
 
 # Experimental parameters
-EXP = 1
+EXP_NUM = 1
 SUBJ = 1
 N_BLOCKS = 3
 N_BLOCK_ITERS = 10
