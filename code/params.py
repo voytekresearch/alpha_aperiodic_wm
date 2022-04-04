@@ -1,3 +1,5 @@
+"""All parameters for decoding spatial working memory (WM) from EEG data."""
+
 # Import necessary modules
 import numpy as np
 
@@ -15,5 +17,5 @@ ALPHA_BAND = (8, 12)  # Hz
 # IEM parameters
 IEM_N_CHANNELS = 8
 IEM_FEAT_SPACE_EDGES = (0, 359)
-IEM_BASIS_FUNC = lambda theta: np.sin(0.5 * np.radians(theta)) ** 7 
+IEM_BASIS_FUNC = lambda theta: np.sin(0.5 * np.radians(theta)) ** 7
 FEATURE_NAME = 'Spatial Location'
