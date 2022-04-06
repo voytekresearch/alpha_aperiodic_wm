@@ -72,3 +72,19 @@ def calculate_total_power_for_block(
     # Rearrange axes of data to work for IEM pipeline
     total_power_arr = np.moveaxis(total_power_arr, 0, 1)
     return total_power_arr
+
+
+def replicate_one_subj(subj):
+    """Replicate one subject."""
+
+
+def replicate_all_subjs(
+    processed_dir=params.PROCESSED_DIR):
+    """Replicate all subjects."""
+    # Get all subject IDs
+    subjs = sorted([f.split('_')[0] for f in os.listdir(
+        processed_dir) if 'total_power' in f])
+
+    # Process each subject's data
+    for subj in subjs:
+        replicate_one_subj(subj)
