@@ -36,25 +36,21 @@ class IEM():
         self.estimated_ctfs = None
         self.channel_offsets = None
         self.mean_channel_offset = None
-        return
 
     def _gen_design_matrix(self, labels):
         """Generate design matrix to serve as teacher in training IEM."""
         self.design_matrix = self.basis_set @ np.eye(len(self.theta))[labels].T
-        return
 
     def fit_iem(self, train_data):
         """Use training data to estimate weights for IEM that predict labels
         from data."""
         inv = np.linalg.inv(self.design_matrix @ self.design_matrix.T)
         self.weights = train_data @ self.design_matrix.T @ inv
-        return
 
     def train_model(self, train_data, train_labels):
         """Train IEM model to estimate training labels from training data."""
         self._gen_design_matrix(train_labels)
         self.fit_iem(train_data)
-        return
 
     def estimate_crf(self, test_data, test_labels):
         """Estimate channel response function (CRF) from testing data."""
@@ -67,7 +63,6 @@ class IEM():
         self.channel_offsets = self.basis_set.T @ self.estimated_ctfs
         self.mean_channel_offset = np.roll(np.mean(
             self.channel_offsets, axis=1), self.feat_space_range // 2)
-        return
 
     def plot_basis_set(self):
         """Plot basis set for IEM model."""
