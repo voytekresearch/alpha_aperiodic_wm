@@ -5,54 +5,33 @@ Foster and colleagues (https://pubmed.ncbi.nlm.nih.gov/26467522/)"""
 import os.path
 import numpy as np
 import mne
+import multiprocessing as mp
 import params
+from iem import IEM
 
 
 def load_processed_data(subj, processed_dir=params.PROCESSED_DIR):
     """Load processed EEG and behavioral data for one subject."""
     # Load epoched EEG data
-    epochs = mne.io.read_raw_fif(os.path.join(
-        processed_dir, f'{subj}_eeg_data_epo.fif'))
+    epochs = mne.read_epochs(os.path.join(
+        processed_dir, f'{subj}_eeg_data_epo.fif'), preload=True)
 
     # Load behavioral data
     beh_data = np.load(os.path.join(processed_dir, f'{subj}_beh_data.npz'))
 
     # Load alpha total power data
-    total_power = mne.io.read_raw_fif(os.path.join(
+    total_power = mne.read_epochs(os.path.join(
         processed_dir, f'{subj}_total_power_epo.fif'))
     return epochs, beh_data, total_power
 
 
-def split_trials_into_blocks(beh_data, n_blocks=params.N_BLOCKS):
-    """Split trials into blocks with even number of trials in each block for
-    each location bin."""
-    # Seperate into blocks
-    blocks = [np.array([]) for _ in range(n_blocks)]
-    for val in set(beh_data['posBin'] ):
-        # Find indices with particular values and randomly permute these indices
-        rand_inds = np.random.permutation(
-            np.where(beh_data['posBin'] == val)[0])
-
-        # Split these indices into blocks
-        blocks_val = np.array_split(rand_inds, n_blocks)
-
-        # Add blocks of particular value to big blocks structure
-        blocks = sorted(blocks, key=len)
-        blocks = [np.concatenate((
-            block, block_val)) for block, block_val in zip(blocks, blocks_val)]
-
-    # Order blocks by length (max difference between any two blocks' length
-    # should be 1)
-    blocks = sorted(blocks, key=len)
-    return blocks
-
-
-def calculate_total_power_for_block(
-    beh_data, total_power, epochs, n_blocks=params.N_BLOCKS):
+def calculate_total_power_for_trial_blocks(
+        beh_data, total_power, epochs, n_blocks=params.N_BLOCKS):
     """Calculate total power by averaging across trials within a block for each
     location bin."""
     # Extract relative variables from data
     pos_bins = beh_data['posBin']
+    n_bins = len(set(pos_bins))
     n_channels, n_timepts = epochs.get_data().shape[-2:]
 
     # Determine number of trials per location bin
@@ -61,25 +40,93 @@ def calculate_total_power_for_block(
             pos_bins)))[0]+1)
 
     # Calculate total power for block of trials
-    total_power_arr = np.zeros((len(set(
-        pos_bins)) * n_blocks, n_channels, n_timepts))
+    total_power_arr = np.zeros((n_blocks, n_bins, n_channels, n_timepts))
     for i, val_split in enumerate(idx_split_by_vals):
+        # Randomly permute indices
         idx = np.random.permutation(val_split)[:n_trials_per_bin]
+
+        # Average total power across block of trials
         block_avg = np.real(np.mean(total_power.get_data()[idx, :, :].reshape(
             -1, n_blocks, n_channels, n_timepts), axis=0))
-        total_power_arr[i * n_blocks:(i + 1) * n_blocks, :, :] = block_avg
+
+        # Add block-averaged total power to array
+        total_power_arr[:, i, :, :] = block_avg
 
     # Rearrange axes of data to work for IEM pipeline
-    total_power_arr = np.moveaxis(total_power_arr, 0, 1)
+    total_power_arr = np.moveaxis(total_power_arr, 2, 0)
     return total_power_arr
 
+def iem_one_timepoint(train_data, train_labels, test_data, test_labels):
+    """Estimate channel response function (CRF) for one block of training and
+    testing data at one time point."""
+    # Initialize IEM instance
+    iem = IEM()
 
-def replicate_one_subj(subj):
+    # Train IEM using training data
+    iem.train_model(train_data, train_labels)
+
+    # Test IEM using testing data
+    iem.estimate_crf(test_data, test_labels)
+    return iem.mean_channel_offset
+
+
+def iem_one_block(
+        train_data, train_labels, test_data, test_labels, time_axis=-1):
+    """Estimate channel response function (CRF) for one block of training and
+    testing data across all time points."""
+    # Organize data into lists of arrays for each time point
+    data_one_tp = [list(np.rollaxis(
+        data, time_axis)) for data in (train_data, test_data)]
+
+    # Make arguments for multiprocessing such that each function call will
+    # contain training and testing data and labels for one time point
+    args = tuple([(
+        train_data_one_tp, train_labels, test_data_one_tp, test_labels) for
+            train_data_one_tp, test_data_one_tp in zip(*data_one_tp)])
+
+    # Parallelize training and testing of IEM across time points
+    with mp.Pool() as pool:
+        mean_channel_offset = pool.starmap(iem_one_timepoint, args)
+    return np.array(mean_channel_offset).T
+
+
+
+def replicate_one_subj(
+        subj, n_blocks=params.N_BLOCKS, n_block_iters=params.N_BLOCK_ITERS):
     """Replicate one subject."""
+    # Load processed data
+    epochs, beh_data, total_power = load_processed_data(subj)
+
+    # Iterate through sets of blocks
+    n_timepts = epochs.get_data().shape[-1]
+    mean_channel_offset = np.zeros((
+        n_block_iters, n_blocks, IEM().feat_space_range, n_timepts))
+    for block_iter in range(n_block_iters):
+        # Calculate total power
+        total_power_arr = calculate_total_power_for_trial_blocks(
+            beh_data, total_power, epochs)
+
+        # Iterate through blocks
+        for test_block_num in range(n_blocks):
+            # Split into training and testing data
+            train_data = np.delete(
+                total_power_arr, test_block_num, axis=1).reshape(
+                    total_power_arr.shape[0], -1, total_power_arr.shape[-1])
+            test_data = total_power_arr[:, test_block_num, :, :]
+
+            # Create labels for training and testing
+            train_labels = np.tile(IEM().channel_centers, 2)
+            test_labels = IEM().channel_centers
+
+            # Train IEMs for block of data
+            mean_channel_offset[
+                block_iter, test_block_num, :, :] = iem_one_block(
+                    train_data, train_labels, test_data, test_labels)
+    return subj
 
 
 def replicate_all_subjs(
-    processed_dir=params.PROCESSED_DIR):
+        processed_dir=params.PROCESSED_DIR):
     """Replicate all subjects."""
     # Get all subject IDs
     subjs = sorted([f.split('_')[0] for f in os.listdir(
@@ -88,3 +135,7 @@ def replicate_all_subjs(
     # Process each subject's data
     for subj in subjs:
         replicate_one_subj(subj)
+
+
+if __name__ == '__main__':
+    replicate_all_subjs()
