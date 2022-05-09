@@ -5,6 +5,7 @@ Foster and colleagues (https://pubmed.ncbi.nlm.nih.gov/26467522/)"""
 import os.path
 import multiprocessing as mp
 import numpy as np
+import matplotlib.pyplot as plt
 import mne
 import params
 from iem import IEM
@@ -88,6 +89,27 @@ def iem_one_block(
     with mp.Pool() as pool:
         mean_channel_offset = pool.starmap(iem_one_timepoint, args)
     return np.array(mean_channel_offset).T
+
+
+def plot_channel_offset(channel_offset_arr, save_fname=None):
+    """Plot channel offset across time."""
+    # Initialize figure
+    plt.figure()
+
+    # Plot channel offset
+    plt.pcolormesh(channel_offset_arr, cmap='YlGnBu_r')
+
+    # Label axes
+    plt.xlabel('Time (ms)')
+    plt.ylabel('Channel Offset')
+
+    # Add colorbar
+    plt.colorbar(label='Channel Response')
+
+    # Save if desired
+    if save_fname:
+        plt.savefig(save_fname)
+    return
 
 
 def replicate_one_subj(
