@@ -3,9 +3,9 @@ Foster and colleagues (https://pubmed.ncbi.nlm.nih.gov/26467522/)"""
 
 # Import neccesary modules
 import os.path
+import multiprocessing as mp
 import numpy as np
 import mne
-import multiprocessing as mp
 import params
 from iem import IEM
 
@@ -90,7 +90,6 @@ def iem_one_block(
     return np.array(mean_channel_offset).T
 
 
-
 def replicate_one_subj(
         subj, n_blocks=params.N_BLOCKS, n_block_iters=params.N_BLOCK_ITERS):
     """Replicate one subject."""
@@ -122,7 +121,10 @@ def replicate_one_subj(
             mean_channel_offset[
                 block_iter, test_block_num, :, :] = iem_one_block(
                     train_data, train_labels, test_data, test_labels)
-    return subj
+
+    # Average across blocks and block iterations
+    mean_channel_offset = np.mean(mean_channel_offset, axis=(0, 1))
+    return mean_channel_offset
 
 
 def replicate_all_subjs(
@@ -133,8 +135,10 @@ def replicate_all_subjs(
         processed_dir) if 'total_power' in f])
 
     # Process each subject's data
+    mean_channel_offsets = []
     for subj in subjs:
-        replicate_one_subj(subj)
+        subj_mean_channel_offset = replicate_one_subj(subj)
+        mean_channel_offsets.append(subj_mean_channel_offset)
 
 
 if __name__ == '__main__':
