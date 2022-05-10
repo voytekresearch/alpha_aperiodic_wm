@@ -100,6 +100,13 @@ def plot_channel_offset(
     # Plot channel offset
     plt.pcolormesh(channel_offset_arr, cmap='YlGnBu_r')
 
+    offset_range = channel_offset_arr.shape[0]
+    ytick_locs = np.linspace(0, offset_range-1, num=5)
+    ytick_labels = np.linspace(
+        -offset_range // 2, offset_range // 2, num=5).astype(int)
+    plt.yticks(ticks=ytick_locs, labels=ytick_labels)
+    plt.gca().invert_yaxis()
+
     # Label axes
     plt.xlabel('Time (ms)')
     plt.ylabel('Channel Offset')
@@ -121,7 +128,13 @@ def replicate_one_subj(
     # Load channel offset data if already done
     save_fname = os.path.join(save_dir, f'channel_offset_{subj}.npy')
     if os.path.exists(save_fname):
-        return np.load(save_fname)
+        # Load offset array
+        mean_channel_offset = np.load(save_fname)
+
+        # Plot channel offset and save
+        plot_channel_offset(
+            mean_channel_offset, save_fname=f'channel_offset_{subj}')
+        return mean_channel_offset
 
     # Load processed data
     epochs, beh_data, total_power = load_processed_data(subj)
