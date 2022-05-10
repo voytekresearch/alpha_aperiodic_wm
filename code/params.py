@@ -8,6 +8,7 @@ import numpy as np
 DATA_DIR = 'data'
 DOWNLOAD_DIR = os.path.join(DATA_DIR, 'from_osf')
 PROCESSED_DIR = os.path.join(DATA_DIR, 'processed')
+CHANNEL_OFFSETS_DIR = os.path.join(DATA_DIR, 'channel_offsets')
 EEG_DIR = 'EEG'
 FIG_DIR = 'figs'
 

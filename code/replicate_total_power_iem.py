@@ -115,8 +115,14 @@ def plot_channel_offset(
 
 
 def replicate_one_subj(
-        subj, n_blocks=params.N_BLOCKS, n_block_iters=params.N_BLOCK_ITERS):
+        subj, n_blocks=params.N_BLOCKS, n_block_iters=params.N_BLOCK_ITERS,
+        save_dir=params.CHANNEL_OFFSETS_DIR):
     """Replicate one subject."""
+    # Load channel offset data if already done
+    save_fname = os.path.join(save_dir, f'channel_offset_{subj}.npy')
+    if os.path.exists(save_fname):
+        return np.load(save_fname)
+
     # Load processed data
     epochs, beh_data, total_power = load_processed_data(subj)
 
@@ -148,6 +154,10 @@ def replicate_one_subj(
 
     # Average across blocks and block iterations
     mean_channel_offset = np.mean(mean_channel_offset, axis=(0, 1))
+
+    # Save data to avoid unnecessary re-processing
+    os.makedirs(save_dir, exist_ok=True)
+    np.save(save_fname, mean_channel_offset)
 
     # Plot channel offset and save
     plot_channel_offset(
