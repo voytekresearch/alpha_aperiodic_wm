@@ -178,6 +178,13 @@ def replicate_all_subjs(
         subj_mean_channel_offset = replicate_one_subj(subj)
         mean_channel_offsets.append(subj_mean_channel_offset)
 
+    # Combine channel offsets across subjects
+    mean_channel_offset_all_subjs = np.mean(mean_channel_offsets, axis=0)
+
+    # Plot channel offset across subjects
+    plot_channel_offset(
+        mean_channel_offset_all_subjs, save_fname='channel_offset_all')
+
 
 if __name__ == '__main__':
     replicate_all_subjs()
