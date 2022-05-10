@@ -92,23 +92,21 @@ def iem_one_block(
 
 
 def plot_channel_offset(
-        channel_offset_arr, save_fname=None, save_dir=params.FIG_DIR):
+        channel_offset_arr, t_arr, save_fname=None, save_dir=params.FIG_DIR):
     """Plot channel offset across time."""
     # Initialize figure
     plt.figure()
 
     # Plot channel offset
-    plt.pcolormesh(channel_offset_arr, cmap='YlGnBu_r')
-
     offset_range = channel_offset_arr.shape[0]
-    ytick_locs = np.linspace(0, offset_range-1, num=5)
-    ytick_labels = np.linspace(
-        -offset_range // 2, offset_range // 2, num=5).astype(int)
-    plt.yticks(ticks=ytick_locs, labels=ytick_labels)
+    offset_vals = np.linspace(
+        -offset_range // 2, offset_range // 2, num=offset_range).astype(int)
+    plt.pcolormesh(
+        t_arr, offset_vals, channel_offset_arr, cmap='YlGnBu_r', shading='auto')
     plt.gca().invert_yaxis()
 
     # Label axes
-    plt.xlabel('Time (ms)')
+    plt.xlabel('Time (s)')
     plt.ylabel('Channel Offset')
 
     # Add colorbar
@@ -118,13 +116,15 @@ def plot_channel_offset(
     if save_fname:
         os.makedirs(save_dir, exist_ok=True)
         plt.savefig(os.path.join(save_dir, save_fname))
-    return
 
 
 def replicate_one_subj(
         subj, n_blocks=params.N_BLOCKS, n_block_iters=params.N_BLOCK_ITERS,
         save_dir=params.CHANNEL_OFFSETS_DIR):
     """Replicate one subject."""
+    # Load processed data
+    epochs, beh_data, total_power = load_processed_data(subj)
+
     # Load channel offset data if already done
     save_fname = os.path.join(save_dir, f'channel_offset_{subj}.npy')
     if os.path.exists(save_fname):
@@ -133,11 +133,9 @@ def replicate_one_subj(
 
         # Plot channel offset and save
         plot_channel_offset(
-            mean_channel_offset, save_fname=f'channel_offset_{subj}')
-        return mean_channel_offset
-
-    # Load processed data
-    epochs, beh_data, total_power = load_processed_data(subj)
+            mean_channel_offset, epochs.times,
+            save_fname=f'channel_offset_{subj}')
+        return mean_channel_offset, epochs.times
 
     # Iterate through sets of blocks
     n_timepts = epochs.get_data().shape[-1]
@@ -174,8 +172,8 @@ def replicate_one_subj(
 
     # Plot channel offset and save
     plot_channel_offset(
-        mean_channel_offset, save_fname=f'channel_offset_{subj}')
-    return mean_channel_offset
+        mean_channel_offset, epochs.times, save_fname=f'channel_offset_{subj}')
+    return mean_channel_offset, epochs.times
 
 
 def replicate_all_subjs(
@@ -188,7 +186,7 @@ def replicate_all_subjs(
     # Process each subject's data
     mean_channel_offsets = []
     for subj in subjs:
-        subj_mean_channel_offset = replicate_one_subj(subj)
+        subj_mean_channel_offset, t_arr = replicate_one_subj(subj)
         mean_channel_offsets.append(subj_mean_channel_offset)
 
     # Combine channel offsets across subjects
@@ -196,7 +194,7 @@ def replicate_all_subjs(
 
     # Plot channel offset across subjects
     plot_channel_offset(
-        mean_channel_offset_all_subjs, save_fname='channel_offset_all')
+        mean_channel_offset_all_subjs, t_arr, save_fname='channel_offset_all')
 
 
 if __name__ == '__main__':
