@@ -9,6 +9,7 @@ DATA_DIR = 'data'
 DOWNLOAD_DIR = os.path.join(DATA_DIR, 'from_osf')
 PROCESSED_DIR = os.path.join(DATA_DIR, 'processed')
 EEG_DIR = 'EEG'
+FIG_DIR = 'figs'
 
 # Experimental parameters
 EXPERIMENT_NUM = 1

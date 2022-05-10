@@ -91,7 +91,8 @@ def iem_one_block(
     return np.array(mean_channel_offset).T
 
 
-def plot_channel_offset(channel_offset_arr, save_fname=None):
+def plot_channel_offset(
+        channel_offset_arr, save_fname=None, save_dir=params.FIG_DIR):
     """Plot channel offset across time."""
     # Initialize figure
     plt.figure()
@@ -108,7 +109,8 @@ def plot_channel_offset(channel_offset_arr, save_fname=None):
 
     # Save if desired
     if save_fname:
-        plt.savefig(save_fname)
+        os.makedirs(save_dir, exist_ok=True)
+        plt.savefig(os.path.join(save_dir, save_fname))
     return
 
 
@@ -146,6 +148,10 @@ def replicate_one_subj(
 
     # Average across blocks and block iterations
     mean_channel_offset = np.mean(mean_channel_offset, axis=(0, 1))
+
+    # Plot channel offset and save
+    plot_channel_offset(
+        mean_channel_offset, save_fname=f'channel_offset_{subj}')
     return mean_channel_offset
 
 
