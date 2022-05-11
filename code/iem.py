@@ -7,6 +7,7 @@ import seaborn as sns
 from scipy.stats import rankdata
 import params
 
+
 class IEM():
     """IEM model that can be trained to estimate labels from data."""
     def __init__(
