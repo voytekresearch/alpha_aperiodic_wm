@@ -19,6 +19,13 @@ N_BLOCKS = 3
 N_BLOCK_ITERS = 10
 ALPHA_BAND = (8, 12)  # Hz
 
+# Spectral estimation parameters
+FMIN = 2  # Hz
+FMAX = 100  # Hz
+N_FREQS = 128
+TIME_WINDOW_LEN = 0.5  # s
+DS_FACT = 4  # downsampling factor
+
 # IEM parameters
 IEM_N_CHANNELS = 8
 IEM_FEAT_SPACE_EDGES = (0, 359)

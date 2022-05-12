@@ -6,6 +6,7 @@ import os
 import os.path
 import mne
 from mne.externals.pymatreader import read_mat
+from scipy.signal import decimate
 import numpy as np
 import params
 
@@ -49,9 +50,32 @@ def load_beh_data(
     return beh_data_cleaned
 
 
+def compute_tfr(epochs, fmin=params.FMIN, fmax=params.FMAX,
+        n_freqs=params.N_FREQS, time_window_len=params.TIME_WINDOW_LEN,
+        ds_fact=params.DS_FACT):
+    """Compute time-frequency representation (i.e. spectrogram) using
+    multitapers across epochs and channels."""
+    # Make frequencies log-spaced
+    freqs = np.logspace(np.log10(fmin), np.log10(fmax), n_freqs)
+
+    # Make time window length consistent across frequencies
+    n_cycles = freqs * time_window_len
+
+    # Use multitapers to estimate spectrogram
+    tfr_mt = mne.time_frequency.tfr_multitaper(
+        epochs.copy(), freqs, n_cycles, return_itc=False, picks='eeg',
+        average=False)
+    tfr_mt = decimate(tfr_mt, ds_fact)
+    return tfr_mt
+
+
 def preprocess_data(epochs, alpha_band=params.ALPHA_BAND):
-    """Filter data in desired alpha band, apply Hilbert transform, and compute
-    total power from analytic signal."""
+    """Following Foster et al. (2015), filter data in desired alpha band, apply
+    Hilbert transform, and compute total power from analytic signal.
+
+    Then, use multitaper to estimate PSD with sliding window, spectral
+    parameterization to fit periodic and aperiodic components, and then isolate
+    aperiodic exponent and alpha oscillatory power."""
     # Band-pass filter in alpha band
     alpha_band = epochs.copy().filter(*alpha_band)
 
@@ -61,6 +85,9 @@ def preprocess_data(epochs, alpha_band=params.ALPHA_BAND):
     # Get total power from analytic signal
     total_power = analytic_sig.copy().apply_function(np.abs).apply_function(
         np.square)
+
+    # Estimate spectrogram using multitapers
+    tfr_mt = compute_tfr(epochs)
     return total_power
 
 
