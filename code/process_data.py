@@ -12,13 +12,17 @@ import params
 
 
 def load_eeg_data(
-    subj, download_dir=params.DOWNLOAD_DIR, eeg_dir=params.EEG_DIR,
-    experiment_num=params.EXPERIMENT_NUM):
+    subj, epochs_fname, download_dir=params.DOWNLOAD_DIR,
+    eeg_dir=params.EEG_DIR, experiment_num=params.EXPERIMENT_NUM):
     """Load EEG data for one subject."""
     # Load data from MAT file
     eeg_mat_fname = os.path.join(
         download_dir, f'exp{experiment_num}', eeg_dir, f'{subj}_EEG.mat')
     eeg_data = read_mat(eeg_mat_fname)['eeg']
+
+    # Load epochs file if already created
+    if os.path.exists(epochs_fname):
+        return eeg_data, mne.read_epochs(epochs_fname)
 
     # Create epochs array from loaded MAT file
     info = mne.create_info(
@@ -27,26 +31,32 @@ def load_eeg_data(
         eeg_data['data'], info, tmin=eeg_data['preTime'] / 1000).drop(
             eeg_data['arf']['artIndCleaned'].astype(bool))
     assert epochs.times[-1] == eeg_data['postTime'] / 1000
+
+    # Save epochs
+    epochs.save(epochs_fname)
     return eeg_data, epochs
 
 
 def load_beh_data(
-    subj, eeg_data, download_dir=params.DOWNLOAD_DIR,
-    experiment_num=params.EXPERIMENT_NUM, cleaned=True):
+    subj, eeg_data, save_fname, download_dir=params.DOWNLOAD_DIR,
+    experiment_num=params.EXPERIMENT_NUM):
     """Load behavioral data for one subject."""
+    # Load data if already computed
+    if os.path.exists(save_fname):
+        return np.load(save_fname)
+
     # Load data from MAT file
     beh_mat_fname = os.path.join(
         download_dir, f'exp{experiment_num}', 'Data',
         f'{subj}_MixModel_wBias.mat')
     beh_data = read_mat(beh_mat_fname)['beh']['trial']
 
-    # Return all behavioral data if desired
-    if not cleaned:
-        return beh_data
-
     # Remove trials with artifacts
     beh_data_cleaned = {k: val[~eeg_data['arf']['artIndCleaned'].astype(
         bool)] for k, val in beh_data.items()}
+
+    # Save data
+    np.savez(save_fname, **beh_data_cleaned)
     return beh_data_cleaned
 
 
@@ -76,13 +86,17 @@ def compute_tfr(epochs, save_fname, fmin=params.FMIN, fmax=params.FMAX,
     return tfr_mt
 
 
-def compute_total_power(epochs, alpha_band=params.ALPHA_BAND):
+def compute_total_power(epochs, save_fname, alpha_band=params.ALPHA_BAND):
     """Following Foster et al. (2015), filter data in desired alpha band, apply
     Hilbert transform, and compute total power from analytic signal.
 
     Then, use multitaper to estimate PSD with sliding window, spectral
     parameterization to fit periodic and aperiodic components, and then isolate
     aperiodic exponent and alpha oscillatory power."""
+    # Load total power data if already computed
+    if os.path.exists(save_fname):
+        return mne.read_epochs(save_fname)
+
     # Band-pass filter in alpha band
     alpha_band = epochs.copy().filter(*alpha_band)
 
@@ -92,6 +106,9 @@ def compute_total_power(epochs, alpha_band=params.ALPHA_BAND):
     # Get total power from analytic signal
     total_power = analytic_sig.copy().apply_function(np.abs).apply_function(
         np.square)
+
+    # Save data to avoid re-processing
+    total_power.save(save_fname)
     return total_power
 
 
@@ -110,22 +127,21 @@ def process_one_subj(subj, processed_dir=params.PROCESSED_DIR):
     os.makedirs(processed_dir, exist_ok=True)
 
     # Load subject's EEG data
-    eeg_data, epochs = load_eeg_data(subj)
+    epochs_fname = os.path.join(processed_dir, f'{subj}_eeg_data_epo.fif')
+    eeg_data, epochs = load_eeg_data(subj, epochs_fname)
 
     # Load subject's behavioral data
-    beh_data = load_beh_data(subj, eeg_data)
+    beh_data_fname = os.path.join(processed_dir, f'{subj}_beh_data.npz')
+    load_beh_data(subj, eeg_data, beh_data_fname)
 
     # Calculate total power
-    total_power = compute_total_power(epochs)
+    total_power_fname = os.path.join(
+        processed_dir, f'{subj}_total_power_epo.fif')
+    compute_total_power(epochs, total_power_fname)
 
     # Compute spectrogram
     tfr_fname = os.path.join(processed_dir, f'{subj}-tfr.h5')
-    tfr_mt = compute_tfr(epochs, tfr_fname)
-
-    # Save all data for subject
-    epochs.save(os.path.join(processed_dir, f'{subj}_eeg_data_epo.fif'))
-    np.savez(os.path.join(processed_dir, f'{subj}_beh_data.npz'), **beh_data)
-    total_power.save(os.path.join(processed_dir, f'{subj}_total_power_epo.fif'))
+    compute_tfr(epochs, tfr_fname)
 
 
 def process_all_subjs(
