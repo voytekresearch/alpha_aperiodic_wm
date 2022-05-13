@@ -9,6 +9,7 @@ from mne.externals.pymatreader import read_mat
 import numpy as np
 from fooof import FOOOFGroup, fit_fooof_3d
 from fooof.objs import combine_fooofs
+from fooof.analysis import get_band_peak_fg
 import params
 
 
@@ -116,8 +117,7 @@ def compute_tfr(epochs, save_fname, fmin=params.FMIN, fmax=params.FMAX,
 def run_sparam(
         tfr, save_fname, n_peaks=params.N_PEAKS, fmin=params.FMIN,
         fmax=params.FMAX, n_cpus=params.N_CPUS,
-        peak_width_lims=params.PEAK_WIDTH_LIMS,
-        sparam_params=params.SPARAM_PARAMS):
+        peak_width_lims=params.PEAK_WIDTH_LIMS):
     """Parameterize the neural power spectra for each time point in the
     spectrogram. Spectrogram (tfr) should have shape of (n_trials, n_channels,
     n_freqs, n_timepoints)."""
@@ -133,12 +133,26 @@ def run_sparam(
     tfr.data = tfr.data.reshape(-1, len(tfr.times), len(tfr.freqs))[:2,:,:]
 
     # Fit spectral parameterization model
-    fgs = combine_fooofs(fit_fooof_3d(
+    fooof_grp_all = combine_fooofs(fit_fooof_3d(
         fooof_grp, tfr.freqs, tfr.data, freq_range=(fmin, fmax), n_jobs=n_cpus))
 
     # Save spectral parameterization model
-    fgs.save(save_fname, save_results=True)
-    return fgs
+    fooof_grp_all.save(save_fname, save_results=True)
+    return fooof_grp_all
+
+
+def extract_params_from_sparam(
+        fooof_grp, freq_band=params.ALPHA_BAND):
+    """Extract parameters of interest from spectral parameterization model."""
+    # Extract aperiodic  parameters from model
+    aperiodic_params = fooof_grp.get_params('aperiodic_params')
+
+    # Select only peak parameters with peak frequency in desired frequency band
+    peak_params = get_band_peak_fg(fooof_grp, freq_band)
+
+    # Put all parameters together
+    model_params = np.hstack((aperiodic_params, peak_params))
+    return
 
 
 def process_one_subj(subj, processed_dir=params.PROCESSED_DIR):
@@ -174,7 +188,10 @@ def process_one_subj(subj, processed_dir=params.PROCESSED_DIR):
 
     # Parameterize spectrogram
     sparam_fname = os.path.join(processed_dir, f'{subj}_sparam_results')
-    run_sparam(tfr_mt, sparam_fname)
+    fooof_grp = run_sparam(tfr_mt, sparam_fname)
+
+    # Extract parameters from model
+    extract_params_from_sparam(fooof_grp)
 
 
 def process_all_subjs(

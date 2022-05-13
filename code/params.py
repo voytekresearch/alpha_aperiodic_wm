@@ -29,13 +29,7 @@ N_FREQS = 128
 TIME_WINDOW_LEN = 0.5  # s
 DECIM_FACT = 4  # decimation/downsampling factor
 N_PEAKS = 4
-PEAK_WIDTH_LIMS = (1, 8)
-SPARAM_PARAMS = (
-    ('aperiodic_params', 'exponent', 'exp'),
-    ('aperiodic_params', 'offset', 'offset'),
-    ('peak_params', 'CF', 'freq'),
-    ('peak_params', 'PW', 'power'),
-    ('peak_params', 'BW', 'width'))  # (data field, var/column, desired name)
+PEAK_WIDTH_LIMS = (2, 8)
 
 # IEM parameters
 IEM_N_CHANNELS = 8
