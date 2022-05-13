@@ -49,10 +49,19 @@ def load_beh_data(
     return beh_data_cleaned
 
 
-def compute_tfr(epochs, fmin=params.FMIN, fmax=params.FMAX,
-        n_freqs=params.N_FREQS, time_window_len=params.TIME_WINDOW_LEN):
+def compute_tfr(subj, epochs, fmin=params.FMIN, fmax=params.FMAX,
+        n_freqs=params.N_FREQS, time_window_len=params.TIME_WINDOW_LEN,
+        processed_dir=params.PROCESSED_DIR):
     """Compute time-frequency representation (i.e. spectrogram) using
     multitapers across epochs and channels."""
+    # Make file name for spectrogram to be saved with
+    save_fname = os.path.join(processed_dir, f'{subj}-tfr.h5')
+
+    # Load file if already computed
+    if os.path.exists(save_fname):
+        tfr_mt = mne.time_frequency.read_tfrs(save_fname)
+        return tfr_mt
+
     # Make frequencies log-spaced
     freqs = np.logspace(np.log10(fmin), np.log10(fmax), n_freqs)
 
@@ -63,10 +72,13 @@ def compute_tfr(epochs, fmin=params.FMIN, fmax=params.FMAX,
     tfr_mt = mne.time_frequency.tfr_multitaper(
         epochs.copy(), freqs, n_cycles, n_jobs=4, return_itc=False, picks='eeg',
         average=False)
+
+    # Save spectrogram
+    tfr_mt.save(save_fname)
     return tfr_mt
 
 
-def preprocess_data(epochs, alpha_band=params.ALPHA_BAND):
+def compute_total_power(epochs, alpha_band=params.ALPHA_BAND):
     """Following Foster et al. (2015), filter data in desired alpha band, apply
     Hilbert transform, and compute total power from analytic signal.
 
@@ -82,15 +94,23 @@ def preprocess_data(epochs, alpha_band=params.ALPHA_BAND):
     # Get total power from analytic signal
     total_power = analytic_sig.copy().apply_function(np.abs).apply_function(
         np.square)
-
-    # Estimate spectrogram using multitapers
-    tfr_mt = compute_tfr(epochs)
     return total_power
 
 
 def process_one_subj(subj, processed_dir=params.PROCESSED_DIR):
     """Load EEG and behavioral data and then perform preprocessing for one
-    subject."""
+    subject.
+
+    Preprocessing #1: Following Foster et al. (2015), filter data in desired
+    alpha band, apply Hilbert transform, and compute total power from analytic
+    signal.
+
+    Preprocessing #2: Then, use multitaper to estimate PSD with sliding window,
+    spectral parameterization to fit periodic and aperiodic components, and then
+    isolate aperiodic exponent and alpha oscillatory power."""
+    # Make directory to save data to if necessary
+    os.makedirs(processed_dir, exist_ok=True)
+
     # Load subject's EEG data
     eeg_data, epochs = load_eeg_data(subj)
 
@@ -98,10 +118,10 @@ def process_one_subj(subj, processed_dir=params.PROCESSED_DIR):
     beh_data = load_beh_data(subj, eeg_data)
 
     # Calculate total power
-    total_power = preprocess_data(epochs)
+    total_power = compute_total_power(epochs)
 
-    # Make directory to save data to if necessary
-    os.makedirs(processed_dir, exist_ok=True)
+    # Compute spectrogram
+    tfr_mt = compute_tfr(subj, epochs)
 
     # Save all data for subject
     epochs.save(os.path.join(processed_dir, f'{subj}_eeg_data_epo.fif'))
