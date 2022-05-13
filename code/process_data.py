@@ -6,7 +6,6 @@ import os
 import os.path
 import mne
 from mne.externals.pymatreader import read_mat
-from scipy.signal import decimate
 import numpy as np
 import params
 
@@ -51,8 +50,7 @@ def load_beh_data(
 
 
 def compute_tfr(epochs, fmin=params.FMIN, fmax=params.FMAX,
-        n_freqs=params.N_FREQS, time_window_len=params.TIME_WINDOW_LEN,
-        ds_fact=params.DS_FACT):
+        n_freqs=params.N_FREQS, time_window_len=params.TIME_WINDOW_LEN):
     """Compute time-frequency representation (i.e. spectrogram) using
     multitapers across epochs and channels."""
     # Make frequencies log-spaced
@@ -63,9 +61,8 @@ def compute_tfr(epochs, fmin=params.FMIN, fmax=params.FMAX,
 
     # Use multitapers to estimate spectrogram
     tfr_mt = mne.time_frequency.tfr_multitaper(
-        epochs.copy(), freqs, n_cycles, return_itc=False, picks='eeg',
+        epochs.copy(), freqs, n_cycles, n_jobs=4, return_itc=False, picks='eeg',
         average=False)
-    tfr_mt = decimate(tfr_mt, ds_fact)
     return tfr_mt
 
 
