@@ -12,6 +12,9 @@ CHANNEL_OFFSETS_DIR = os.path.join(DATA_DIR, 'channel_offsets')
 EEG_DIR = 'EEG'
 FIG_DIR = 'figs'
 
+# Computing parameters
+N_CPUS = 6
+
 # Experimental parameters
 EXPERIMENT_NUM = 1
 SUBJ = 1
@@ -26,8 +29,8 @@ N_FREQS = 128
 TIME_WINDOW_LEN = 0.5  # s
 DECIM_FACT = 4  # decimation/downsampling factor
 N_PEAKS = 4
-N_CPUS = 6
-SPARAM_VARS = (
+PEAK_WIDTH_LIMS = (1, 8)
+SPARAM_PARAMS = (
     ('aperiodic_params', 'exponent', 'exp'),
     ('aperiodic_params', 'offset', 'offset'),
     ('peak_params', 'CF', 'freq'),

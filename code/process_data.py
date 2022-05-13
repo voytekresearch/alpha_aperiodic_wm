@@ -114,20 +114,30 @@ def compute_tfr(epochs, save_fname, fmin=params.FMIN, fmax=params.FMAX,
 
 
 def run_sparam(
-        tfr, n_peaks=params.N_PEAKS, fmin=params.FMIN, fmax=params.FMAX,
-        n_cpus=params.N_CPUS, vars=params.SPARAM_VARS):
+        tfr, save_fname, n_peaks=params.N_PEAKS, fmin=params.FMIN,
+        fmax=params.FMAX, n_cpus=params.N_CPUS,
+        peak_width_lims=params.PEAK_WIDTH_LIMS,
+        sparam_params=params.SPARAM_PARAMS):
     """Parameterize the neural power spectra for each time point in the
     spectrogram. Spectrogram (tfr) should have shape of (n_trials, n_channels,
     n_freqs, n_timepoints)."""
     # Initialize FOOOFGroup
-    fooof_grp = FOOOFGroup(max_n_peaks=n_peaks)
+    fooof_grp = FOOOFGroup(
+        max_n_peaks=n_peaks, peak_width_limits=peak_width_lims)
+
+     # Avoid rerunning spectral parameterization if already done
+    if os.path.exists(save_fname):
+        return fooof_grp.load(save_fname)
 
     # Reshape spectrogram
-    tfr.data = tfr.data.reshape(-1, len(tfr.times), len(tfr.freqs))
+    tfr.data = tfr.data.reshape(-1, len(tfr.times), len(tfr.freqs))[:2,:,:]
 
-    # Fit FOOOF
+    # Fit spectral parameterization model
     fgs = combine_fooofs(fit_fooof_3d(
         fooof_grp, tfr.freqs, tfr.data, freq_range=(fmin, fmax), n_jobs=n_cpus))
+
+    # Save spectral parameterization model
+    fgs.save(save_fname, save_results=True)
     return fgs
 
 
@@ -163,7 +173,8 @@ def process_one_subj(subj, processed_dir=params.PROCESSED_DIR):
     tfr_mt = compute_tfr(epochs, tfr_fname)
 
     # Parameterize spectrogram
-    run_sparam(tfr_mt)
+    sparam_fname = os.path.join(processed_dir, f'{subj}_sparam_results')
+    run_sparam(tfr_mt, sparam_fname)
 
 
 def process_all_subjs(
