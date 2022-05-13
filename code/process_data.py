@@ -6,8 +6,9 @@ import os
 import os.path
 import mne
 from mne.externals.pymatreader import read_mat
-from scipy.signal import decimate
 import numpy as np
+from fooof import FOOOFGroup, fit_fooof_3d
+from fooof.objs import combine_fooofs
 import params
 
 
@@ -60,32 +61,6 @@ def load_beh_data(
     return beh_data_cleaned
 
 
-def compute_tfr(epochs, save_fname, fmin=params.FMIN, fmax=params.FMAX,
-        n_freqs=params.N_FREQS, time_window_len=params.TIME_WINDOW_LEN,
-        decim_fact=params.DECIM_FACT, n_cpus=params.N_CPUS):
-    """Compute time-frequency representation (i.e. spectrogram) using
-    multitapers across epochs and channels."""
-    # Load file if already computed
-    if os.path.exists(save_fname):
-        tfr_mt = mne.time_frequency.read_tfrs(save_fname)
-        return tfr_mt
-
-    # Make frequencies log-spaced
-    freqs = np.logspace(np.log10(fmin), np.log10(fmax), n_freqs)
-
-    # Make time window length consistent across frequencies
-    n_cycles = freqs * time_window_len
-
-    # Use multitapers to estimate spectrogram
-    tfr_mt = mne.time_frequency.tfr_multitaper(
-        epochs.copy(), freqs, n_cycles, n_jobs=n_cpus, return_itc=False,
-        picks='eeg', average=False, decim=decim_fact)
-
-    # Save spectrogram
-    tfr_mt.save(save_fname)
-    return tfr_mt
-
-
 def compute_total_power(epochs, save_fname, alpha_band=params.ALPHA_BAND):
     """Following Foster et al. (2015), filter data in desired alpha band, apply
     Hilbert transform, and compute total power from analytic signal.
@@ -112,6 +87,50 @@ def compute_total_power(epochs, save_fname, alpha_band=params.ALPHA_BAND):
     return total_power
 
 
+def compute_tfr(epochs, save_fname, fmin=params.FMIN, fmax=params.FMAX,
+        n_freqs=params.N_FREQS, time_window_len=params.TIME_WINDOW_LEN,
+        decim_fact=params.DECIM_FACT, n_cpus=params.N_CPUS):
+    """Compute time-frequency representation (i.e. spectrogram) using
+    multitapers across epochs and channels."""
+    # Load file if already computed
+    if os.path.exists(save_fname):
+        tfr_mt = mne.time_frequency.read_tfrs(save_fname)
+        return tfr_mt[0]
+
+    # Make frequencies log-spaced
+    freqs = np.linspace(fmin, fmax, n_freqs)
+
+    # Make time window length consistent across frequencies
+    n_cycles = freqs * time_window_len
+
+    # Use multitapers to estimate spectrogram
+    tfr_mt = mne.time_frequency.tfr_multitaper(
+        epochs.copy(), freqs, n_cycles, n_jobs=n_cpus, return_itc=False,
+        picks='eeg', average=False, decim=decim_fact)
+
+    # Save spectrogram
+    tfr_mt.save(save_fname)
+    return tfr_mt
+
+
+def run_sparam(
+        tfr, n_peaks=params.N_PEAKS, fmin=params.FMIN, fmax=params.FMAX,
+        n_cpus=params.N_CPUS, vars=params.SPARAM_VARS):
+    """Parameterize the neural power spectra for each time point in the
+    spectrogram. Spectrogram (tfr) should have shape of (n_trials, n_channels,
+    n_freqs, n_timepoints)."""
+    # Initialize FOOOFGroup
+    fooof_grp = FOOOFGroup(max_n_peaks=n_peaks)
+
+    # Reshape spectrogram
+    tfr.data = tfr.data.reshape(-1, len(tfr.times), len(tfr.freqs))
+
+    # Fit FOOOF
+    fgs = combine_fooofs(fit_fooof_3d(
+        fooof_grp, tfr.freqs, tfr.data, freq_range=(fmin, fmax), n_jobs=n_cpus))
+    return fgs
+
+
 def process_one_subj(subj, processed_dir=params.PROCESSED_DIR):
     """Load EEG and behavioral data and then perform preprocessing for one
     subject.
@@ -120,7 +139,7 @@ def process_one_subj(subj, processed_dir=params.PROCESSED_DIR):
     alpha band, apply Hilbert transform, and compute total power from analytic
     signal.
 
-    Preprocessing #2: Then, use multitaper to estimate PSD with sliding window,
+    Preprocessing #2: Use multitaper to estimate PSD with sliding window,
     spectral parameterization to fit periodic and aperiodic components, and then
     isolate aperiodic exponent and alpha oscillatory power."""
     # Make directory to save data to if necessary
@@ -141,7 +160,10 @@ def process_one_subj(subj, processed_dir=params.PROCESSED_DIR):
 
     # Compute spectrogram
     tfr_fname = os.path.join(processed_dir, f'{subj}-tfr.h5')
-    compute_tfr(epochs, tfr_fname)
+    tfr_mt = compute_tfr(epochs, tfr_fname)
+
+    # Parameterize spectrogram
+    run_sparam(tfr_mt)
 
 
 def process_all_subjs(
