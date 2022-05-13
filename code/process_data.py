@@ -6,6 +6,7 @@ import os
 import os.path
 import mne
 from mne.externals.pymatreader import read_mat
+from scipy.signal import decimate
 import numpy as np
 import params
 
@@ -49,14 +50,11 @@ def load_beh_data(
     return beh_data_cleaned
 
 
-def compute_tfr(subj, epochs, fmin=params.FMIN, fmax=params.FMAX,
+def compute_tfr(epochs, save_fname, fmin=params.FMIN, fmax=params.FMAX,
         n_freqs=params.N_FREQS, time_window_len=params.TIME_WINDOW_LEN,
-        processed_dir=params.PROCESSED_DIR):
+        decim_fact=params.DECIM_FACT, n_cpus=params.N_CPUS):
     """Compute time-frequency representation (i.e. spectrogram) using
     multitapers across epochs and channels."""
-    # Make file name for spectrogram to be saved with
-    save_fname = os.path.join(processed_dir, f'{subj}-tfr.h5')
-
     # Load file if already computed
     if os.path.exists(save_fname):
         tfr_mt = mne.time_frequency.read_tfrs(save_fname)
@@ -70,8 +68,8 @@ def compute_tfr(subj, epochs, fmin=params.FMIN, fmax=params.FMAX,
 
     # Use multitapers to estimate spectrogram
     tfr_mt = mne.time_frequency.tfr_multitaper(
-        epochs.copy(), freqs, n_cycles, n_jobs=4, return_itc=False, picks='eeg',
-        average=False)
+        epochs.copy(), freqs, n_cycles, n_jobs=n_cpus, return_itc=False,
+        picks='eeg', average=False, decim=decim_fact)
 
     # Save spectrogram
     tfr_mt.save(save_fname)
@@ -121,7 +119,8 @@ def process_one_subj(subj, processed_dir=params.PROCESSED_DIR):
     total_power = compute_total_power(epochs)
 
     # Compute spectrogram
-    tfr_mt = compute_tfr(subj, epochs)
+    tfr_fname = os.path.join(processed_dir, f'{subj}-tfr.h5')
+    tfr_mt = compute_tfr(epochs, tfr_fname)
 
     # Save all data for subject
     epochs.save(os.path.join(processed_dir, f'{subj}_eeg_data_epo.fif'))

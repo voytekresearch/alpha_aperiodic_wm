@@ -24,7 +24,8 @@ FMIN = 2  # Hz
 FMAX = 100  # Hz
 N_FREQS = 128
 TIME_WINDOW_LEN = 0.5  # s
-DS_FACT = 4  # downsampling factor
+DECIM_FACT = 4  # decimation/downsampling factor
+N_CPUS = 4
 
 # IEM parameters
 IEM_N_CHANNELS = 8
