@@ -146,8 +146,12 @@ def run_sparam(
 
 
 def extract_params_from_sparam(
-        fooof_grp, tfr_shape, freq_band=params.ALPHA_BAND):
+        fooof_grp, tfr_shape, save_fname, freq_band=params.ALPHA_BAND):
     """Extract parameters of interest from spectral parameterization model."""
+    # Load DataFrame if already generated
+    if os.path.exists(save_fname):
+        return pd.read_csv(save_fname, index_col=False)
+
     # Extract aperiodic  parameters from model
     aperiodic_params = fooof_grp.get_params('aperiodic_params')
 
@@ -165,7 +169,10 @@ def extract_params_from_sparam(
         range(s) for s in index_shape], names=index_names)
     sparam_df = pd.DataFrame(
         model_params, columns=['offset', 'exponent', 'CF', 'PW', 'BW'],
-        index=index)
+        index=index).reset_index()
+
+    # Save DataFrame
+    sparam_df.to_csv(save_fname, index=False)
     return sparam_df
 
 
@@ -205,7 +212,8 @@ def process_one_subj(subj, processed_dir=params.PROCESSED_DIR):
     fooof_grp = run_sparam(tfr_mt, sparam_fname)
 
     # Extract parameters from model
-    extract_params_from_sparam(fooof_grp, tfr_mt.data.shape)
+    sparam_df_fname = os.path.join(processed_dir, f'{subj}_sparam.csv')
+    extract_params_from_sparam(fooof_grp, tfr_mt.data.shape, sparam_df_fname)
 
 
 def process_all_subjs(
