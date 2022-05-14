@@ -10,6 +10,7 @@ import numpy as np
 from fooof import FOOOFGroup, fit_fooof_3d
 from fooof.objs import combine_fooofs
 from fooof.analysis import get_band_peak_fg
+import pandas as pd
 import params
 
 
@@ -121,6 +122,9 @@ def run_sparam(
     """Parameterize the neural power spectra for each time point in the
     spectrogram. Spectrogram (tfr) should have shape of (n_trials, n_channels,
     n_freqs, n_timepoints)."""
+    # Make copy of spectrogram
+    tfr = tfr.copy()
+
     # Initialize FOOOFGroup
     fooof_grp = FOOOFGroup(
         max_n_peaks=n_peaks, peak_width_limits=peak_width_lims)
@@ -130,7 +134,7 @@ def run_sparam(
         return fooof_grp.load(save_fname)
 
     # Reshape spectrogram
-    tfr.data = tfr.data.reshape(-1, len(tfr.times), len(tfr.freqs))[:2,:,:]
+    tfr.data = tfr.data.reshape(-1, len(tfr.times), len(tfr.freqs))
 
     # Fit spectral parameterization model
     fooof_grp_all = combine_fooofs(fit_fooof_3d(
@@ -142,7 +146,7 @@ def run_sparam(
 
 
 def extract_params_from_sparam(
-        fooof_grp, freq_band=params.ALPHA_BAND):
+        fooof_grp, tfr_shape, freq_band=params.ALPHA_BAND):
     """Extract parameters of interest from spectral parameterization model."""
     # Extract aperiodic  parameters from model
     aperiodic_params = fooof_grp.get_params('aperiodic_params')
@@ -152,7 +156,17 @@ def extract_params_from_sparam(
 
     # Put all parameters together
     model_params = np.hstack((aperiodic_params, peak_params))
-    return
+
+    # Create DataFrame
+    n_trials, n_channels, _, n_timepts = tfr_shape
+    index_shape = (n_trials, n_channels, n_timepts)
+    index_names = ['trial', 'channel', 'timepoint']
+    index = pd.MultiIndex.from_product([
+        range(s) for s in index_shape], names=index_names)
+    sparam_df = pd.DataFrame(
+        model_params, columns=['offset', 'exponent', 'CF', 'PW', 'BW'],
+        index=index)
+    return sparam_df
 
 
 def process_one_subj(subj, processed_dir=params.PROCESSED_DIR):
@@ -191,7 +205,7 @@ def process_one_subj(subj, processed_dir=params.PROCESSED_DIR):
     fooof_grp = run_sparam(tfr_mt, sparam_fname)
 
     # Extract parameters from model
-    extract_params_from_sparam(fooof_grp)
+    extract_params_from_sparam(fooof_grp, tfr_mt.data.shape)
 
 
 def process_all_subjs(
