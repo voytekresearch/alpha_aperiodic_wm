@@ -115,65 +115,77 @@ def compute_tfr(epochs, save_fname, fmin=params.FMIN, fmax=params.FMAX,
     return tfr_mt
 
 
-def run_sparam(
-        tfr, save_fname, n_peaks=params.N_PEAKS, fmin=params.FMIN,
-        fmax=params.FMAX, n_cpus=params.N_CPUS,
-        peak_width_lims=params.PEAK_WIDTH_LIMS):
+def run_sparam_one_trial(
+        tfr_one_trial_arr, trial_num, freqs, n_peaks=params.N_PEAKS,
+        peak_width_lims=params.PEAK_WIDTH_LIMS, fmin=params.FMIN,
+        fmax=params.FMAX, n_cpus=params.N_CPUS, freq_band=params.ALPHA_BAND):
     """Parameterize the neural power spectra for each time point in the
-    spectrogram. Spectrogram (tfr) should have shape of (n_trials, n_channels,
-    n_freqs, n_timepoints)."""
-    # Make copy of spectrogram
-    tfr = tfr.copy()
-
+    spectrogram for one trial."""
     # Initialize FOOOFGroup
     fooof_grp = FOOOFGroup(
         max_n_peaks=n_peaks, peak_width_limits=peak_width_lims)
 
-     # Avoid rerunning spectral parameterization if already done
-    if os.path.exists(save_fname):
-        return fooof_grp.load(save_fname)
-
-    # Reshape spectrogram
-    tfr.data = tfr.data.reshape(-1, len(tfr.times), len(tfr.freqs))
-
     # Fit spectral parameterization model
-    fooof_grp_all = combine_fooofs(fit_fooof_3d(
-        fooof_grp, tfr.freqs, tfr.data, freq_range=(fmin, fmax), n_jobs=n_cpus))
+    fooof_grp = combine_fooofs(fit_fooof_3d(
+        fooof_grp, freqs, tfr_one_trial_arr, freq_range=(fmin, fmax),
+        n_jobs=n_cpus))
 
-    # Save spectral parameterization model
-    fooof_grp_all.save(save_fname, save_results=True)
-    return fooof_grp_all
-
-
-def extract_params_from_sparam(
-        fooof_grp, tfr_shape, save_fname, freq_band=params.ALPHA_BAND):
-    """Extract parameters of interest from spectral parameterization model."""
-    # Load DataFrame if already generated
-    if os.path.exists(save_fname):
-        return pd.read_csv(save_fname, index_col=False)
-
-    # Extract aperiodic  parameters from model
+    # Extract aperiodic and model fit parameters from model
     aperiodic_params = fooof_grp.get_params('aperiodic_params')
+    r_squared = fooof_grp.get_params('r_squared')
+    error = fooof_grp.get_params('error')
 
     # Select only peak parameters with peak frequency in desired frequency band
     peak_params = get_band_peak_fg(fooof_grp, freq_band)
 
     # Put all parameters together
-    model_params = np.hstack((aperiodic_params, peak_params))
+    model_params = np.hstack((
+        aperiodic_params, peak_params, r_squared[:, np.newaxis],
+        error[:, np.newaxis]))
 
-    # Create DataFrame
-    n_trials, n_channels, _, n_timepts = tfr_shape
-    index_shape = (n_trials, n_channels, n_timepts)
+    # Create DataFrame for trial
+    n_channels, n_timepts, _ = tfr_one_trial_arr.shape
+    index_shape = (1, n_channels, n_timepts)
     index_names = ['trial', 'channel', 'timepoint']
     index = pd.MultiIndex.from_product([
         range(s) for s in index_shape], names=index_names)
-    sparam_df = pd.DataFrame(
-        model_params, columns=['offset', 'exponent', 'CF', 'PW', 'BW'],
-        index=index).reset_index()
+    column_names = ['offset', 'exponent', 'CF', 'PW', 'BW', 'R^2', 'error']
+    sparam_df_one_trial = pd.DataFrame(
+        model_params, columns=column_names, index=index).reset_index()
+    sparam_df_one_trial['trial'] = trial_num
+    return sparam_df_one_trial
 
-    # Save DataFrame
-    sparam_df.to_csv(save_fname, index=False)
-    return sparam_df
+
+def run_sparam_all_trials(tfr, save_fname):
+    """Parameterize the neural power spectra for each time point in the
+    spectrogram. Spectrogram (tfr) should have shape of (n_trials, n_channels,
+    n_freqs, n_timepoints)."""
+    # Load DataFrame if already generated
+    if os.path.exists(save_fname):
+        return pd.read_csv(save_fname, index_col=False)
+
+    # Make copy of spectrogram
+    tfr = tfr.copy()
+
+    # Reshape spectrogram
+    tfr.data = np.swapaxes(tfr.data, 2, 3)
+
+    # Initialize big DataFrame
+    sparam_df_all_trials = pd.DataFrame([])
+
+    # Iterate through each trial of data
+    for trial_num, trial_tfr in enumerate(tfr.data):
+        # Fit spectral parameterization model for one trial
+        sparam_df_one_trial = run_sparam_one_trial(
+            trial_tfr, trial_num, tfr.freqs)
+
+        # Add fit model parameters to big DataFrame
+        sparam_df_all_trials = pd.concat(
+            (sparam_df_all_trials, sparam_df_one_trial), ignore_index=True)
+
+        # Save DataFrame
+        sparam_df_all_trials.to_csv(save_fname, index=False)
+    return sparam_df_all_trials
 
 
 def process_one_subj(subj, processed_dir=params.PROCESSED_DIR):
@@ -208,12 +220,8 @@ def process_one_subj(subj, processed_dir=params.PROCESSED_DIR):
     tfr_mt = compute_tfr(epochs, tfr_fname)
 
     # Parameterize spectrogram
-    sparam_fname = os.path.join(processed_dir, f'{subj}_sparam_results')
-    fooof_grp = run_sparam(tfr_mt, sparam_fname)
-
-    # Extract parameters from model
     sparam_df_fname = os.path.join(processed_dir, f'{subj}_sparam.csv')
-    extract_params_from_sparam(fooof_grp, tfr_mt.data.shape, sparam_df_fname)
+    run_sparam_all_trials(tfr_mt, sparam_df_fname)
 
 
 def process_all_subjs(
