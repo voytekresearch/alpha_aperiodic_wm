@@ -160,9 +160,16 @@ def run_sparam_all_trials(tfr, save_fname):
     """Parameterize the neural power spectra for each time point in the
     spectrogram. Spectrogram (tfr) should have shape of (n_trials, n_channels,
     n_freqs, n_timepoints)."""
+    # Initialize big DataFrame
+    sparam_df_all_trials = pd.DataFrame([])
+    trials_computed = set([])
+
     # Load DataFrame if already generated
     if os.path.exists(save_fname):
-        return pd.read_csv(save_fname, index_col=False)
+        sparam_df_all_trials = pd.read_csv(save_fname, index_col=False)
+
+        # Determine which trials have already been computed
+        trials_computed = set(sparam_df_all_trials['trial'])
 
     # Make copy of spectrogram
     tfr = tfr.copy()
@@ -170,11 +177,12 @@ def run_sparam_all_trials(tfr, save_fname):
     # Reshape spectrogram
     tfr.data = np.swapaxes(tfr.data, 2, 3)
 
-    # Initialize big DataFrame
-    sparam_df_all_trials = pd.DataFrame([])
-
     # Iterate through each trial of data
     for trial_num, trial_tfr in enumerate(tfr.data):
+        # Avoid re-processing
+        if trial_num in trials_computed:
+            continue
+
         # Fit spectral parameterization model for one trial
         sparam_df_one_trial = run_sparam_one_trial(
             trial_tfr, trial_num, tfr.freqs)
