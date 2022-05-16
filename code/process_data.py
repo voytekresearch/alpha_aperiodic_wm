@@ -4,6 +4,7 @@
 # Import necessary modules
 import os
 import os.path
+import time
 import mne
 from mne.externals.pymatreader import read_mat
 import numpy as np
@@ -152,11 +153,11 @@ def run_sparam_one_trial(
     column_names = ['offset', 'exponent', 'CF', 'PW', 'BW', 'R^2', 'error']
     sparam_df_one_trial = pd.DataFrame(
         model_params, columns=column_names, index=index).reset_index()
-    sparam_df_one_trial['trial'] = trial_num
+    sparam_df_one_trial.loc['trial', :] = trial_num
     return sparam_df_one_trial
 
 
-def run_sparam_all_trials(tfr, save_fname):
+def run_sparam_all_trials(tfr, save_fname, verbose=True):
     """Parameterize the neural power spectra for each time point in the
     spectrogram. Spectrogram (tfr) should have shape of (n_trials, n_channels,
     n_freqs, n_timepoints)."""
@@ -183,6 +184,9 @@ def run_sparam_all_trials(tfr, save_fname):
         if trial_num in trials_computed:
             continue
 
+        # Start timer
+        start = time.time()
+
         # Fit spectral parameterization model for one trial
         sparam_df_one_trial = run_sparam_one_trial(
             trial_tfr, trial_num, tfr.freqs)
@@ -193,6 +197,11 @@ def run_sparam_all_trials(tfr, save_fname):
 
         # Save DataFrame
         sparam_df_all_trials.to_csv(save_fname, index=False)
+
+        # Print progress
+        if verbose:
+            print(f'Spectral parameterization for Trial #{trial_num} in '
+                  f'{time.time() - start} seconds\n')
     return sparam_df_all_trials
 
 
