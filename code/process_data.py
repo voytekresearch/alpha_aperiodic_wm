@@ -7,6 +7,7 @@ import os.path
 import time
 import mne
 from mne.externals.pymatreader import read_mat
+import ray
 import numpy as np
 from fooof import FOOOFGroup, fit_fooof_3d
 from fooof.objs import combine_fooofs
@@ -116,20 +117,24 @@ def compute_tfr(epochs, save_fname, fmin=params.FMIN, fmax=params.FMAX,
     return tfr_mt
 
 
+@ray.remote
 def run_sparam_one_trial(
-        tfr_one_trial_arr, trial_num, freqs, n_peaks=params.N_PEAKS,
+        tfr_arr, trial_num, freqs, n_peaks=params.N_PEAKS,
         peak_width_lims=params.PEAK_WIDTH_LIMS, fmin=params.FMIN,
-        fmax=params.FMAX, n_cpus=params.N_CPUS, freq_band=params.ALPHA_BAND):
+        fmax=params.FMAX, freq_band=params.ALPHA_BAND, verbose=True):
     """Parameterize the neural power spectra for each time point in the
     spectrogram for one trial."""
+    # Start timer
+    start = time.time()
+    print(f'Started spectral parameterization of Trial #{trial_num}')
+
     # Initialize FOOOFGroup
     fooof_grp = FOOOFGroup(
         max_n_peaks=n_peaks, peak_width_limits=peak_width_lims)
 
     # Fit spectral parameterization model
     fooof_grp = combine_fooofs(fit_fooof_3d(
-        fooof_grp, freqs, tfr_one_trial_arr, freq_range=(fmin, fmax),
-        n_jobs=n_cpus))
+        fooof_grp, freqs, tfr_arr[trial_num, :, :, :], freq_range=(fmin, fmax)))
 
     # Extract aperiodic and model fit parameters from model
     aperiodic_params = fooof_grp.get_params('aperiodic_params')
@@ -145,7 +150,7 @@ def run_sparam_one_trial(
         error[:, np.newaxis]))
 
     # Create DataFrame for trial
-    n_channels, n_timepts, _ = tfr_one_trial_arr.shape
+    _, n_channels, n_timepts, _ = tfr_arr.shape
     index_shape = (1, n_channels, n_timepts)
     index_names = ['trial', 'channel', 'timepoint']
     index = pd.MultiIndex.from_product([
@@ -153,11 +158,16 @@ def run_sparam_one_trial(
     column_names = ['offset', 'exponent', 'CF', 'PW', 'BW', 'R^2', 'error']
     sparam_df_one_trial = pd.DataFrame(
         model_params, columns=column_names, index=index).reset_index()
-    sparam_df_one_trial.loc['trial', :] = trial_num
+    sparam_df_one_trial.loc[:, 'trial'] = trial_num
+
+    # Print progress
+    if verbose:
+        print(f'Spectral parameterization for Trial #{trial_num} in '
+              f'{time.time() - start} seconds\n')
     return sparam_df_one_trial
 
 
-def run_sparam_all_trials(tfr, save_fname, verbose=True):
+def run_sparam_all_trials(tfr, save_fname, n_cpus=params.N_CPUS,):
     """Parameterize the neural power spectra for each time point in the
     spectrogram. Spectrogram (tfr) should have shape of (n_trials, n_channels,
     n_freqs, n_timepoints)."""
@@ -176,32 +186,29 @@ def run_sparam_all_trials(tfr, save_fname, verbose=True):
     tfr = tfr.copy()
 
     # Reshape spectrogram
+    n_trials = tfr.data.shape[0]
     tfr.data = np.swapaxes(tfr.data, 2, 3)
 
     # Iterate through each trial of data
-    for trial_num, trial_tfr in enumerate(tfr.data):
-        # Avoid re-processing
-        if trial_num in trials_computed:
-            continue
+    ray.init(num_cpus=n_cpus)
+    tfr_arr_id = ray.put(tfr.data)
 
-        # Start timer
-        start = time.time()
+    # Fit spectral parameterization model for one trial
+    result_ids = [run_sparam_one_trial.remote(
+        tfr_arr_id, trial_num, tfr.freqs) for trial_num in range(n_trials) if
+        trial_num not in trials_computed]
 
-        # Fit spectral parameterization model for one trial
-        sparam_df_one_trial = run_sparam_one_trial(
-            trial_tfr, trial_num, tfr.freqs)
+    # Concatenate trial model parameters and save as processed
+    while result_ids:
+        done_id, result_ids = ray.wait(result_ids)
 
         # Add fit model parameters to big DataFrame
         sparam_df_all_trials = pd.concat(
-            (sparam_df_all_trials, sparam_df_one_trial), ignore_index=True)
+            (sparam_df_all_trials, ray.get(done_id[0])), ignore_index=True)
 
         # Save DataFrame
         sparam_df_all_trials.to_csv(save_fname, index=False)
-
-        # Print progress
-        if verbose:
-            print(f'Spectral parameterization for Trial #{trial_num} in '
-                  f'{time.time() - start} seconds\n')
+    ray.shutdown()
     return sparam_df_all_trials
 
 
