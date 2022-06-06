@@ -1,4 +1,4 @@
-"""Replicate decoding of spatial location from total alpha power using an IEM by
+"""Reproduce decoding of spatial location from total alpha power using an IEM by
 Foster and colleagues (https://pubmed.ncbi.nlm.nih.gov/26467522/)"""
 
 # Import neccesary modules
@@ -118,10 +118,10 @@ def plot_channel_offset(
         plt.savefig(os.path.join(save_dir, save_fname))
 
 
-def replicate_one_subj(
+def reproduce_one_subj(
         subj, n_blocks=params.N_BLOCKS, n_block_iters=params.N_BLOCK_ITERS,
         save_dir=params.CHANNEL_OFFSETS_DIR):
-    """Replicate one subject."""
+    """Reproduce one subject."""
     # Load processed data
     epochs, beh_data, total_power = load_processed_data(subj)
 
@@ -176,9 +176,9 @@ def replicate_one_subj(
     return mean_channel_offset, epochs.times
 
 
-def replicate_all_subjs(
+def reproduce_all_subjs(
         processed_dir=params.PROCESSED_DIR):
-    """Replicate all subjects."""
+    """Reproduce all subjects."""
     # Get all subject IDs
     subjs = sorted([f.split('_')[0] for f in os.listdir(
         processed_dir) if 'total_power' in f])
@@ -186,7 +186,7 @@ def replicate_all_subjs(
     # Process each subject's data
     mean_channel_offsets = []
     for subj in subjs:
-        subj_mean_channel_offset, t_arr = replicate_one_subj(subj)
+        subj_mean_channel_offset, t_arr = reproduce_one_subj(subj)
         mean_channel_offsets.append(subj_mean_channel_offset)
 
     # Combine channel offsets across subjects
@@ -198,4 +198,4 @@ def replicate_all_subjs(
 
 
 if __name__ == '__main__':
-    replicate_all_subjs()
+    reproduce_all_subjs()
