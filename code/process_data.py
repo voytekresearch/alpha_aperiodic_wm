@@ -224,14 +224,20 @@ def convert_sparam_df_to_mne(tfr_mt, sparam_df, save_fname):
     # Collapse frequencies of TFR
     info = tfr_mt.copy().average(dim='freqs').info
 
-    # Make MNE EpochArray for each model parameter
     for col in sparam_df.columns:
+        # Determine filename for selected model parameter
+        col_epochs_fname = save_fname.replace('_epo', f'_{col}_epo')
+
+        # Avoid recomputing
+        if os.path.exists(col_epochs_fname):
+            continue
+
+        # Make MNE Epochs for selected model parameter
         arr = sparam_df[col].values.reshape(sparam_df.index.levshape)
         epochs_arr = mne.EpochsArray(arr, info)
 
         # Save EpochArray
-        epochs_arr.save(
-            save_fname.replace('_epo', f'_{col}_epo'), overwrite=True)
+        epochs_arr.save(col_epochs_fname)
     return
 
 
