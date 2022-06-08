@@ -212,6 +212,29 @@ def run_sparam_all_trials(tfr, save_fname, n_cpus=params.N_CPUS,):
     return sparam_df_all_trials
 
 
+def convert_sparam_df_to_mne(tfr_mt, sparam_df, save_fname):
+    """Convert spectral parameterization DataFrame to series of MNE epochs, one
+    for each relevant spectral parameterization model parameter."""
+    # Reorganize spectral parameterization DataFrame
+    sparam_df = sparam_df.set_index(['trial', 'channel', 'timepoint'])
+    if len(sparam_df) != np.prod(sparam_df.index.levshape):
+        sparam_df = sparam_df.reindex(pd.MultiIndex.from_product(
+            [np.arange(n) for n in sparam_df.index.levshape]))
+
+    # Collapse frequencies of TFR
+    info = tfr_mt.copy().average(dim='freqs').info
+
+    # Make MNE EpochArray for each model parameter
+    for col in sparam_df.columns:
+        arr = sparam_df[col].values.reshape(sparam_df.index.levshape)
+        epochs_arr = mne.EpochsArray(arr, info)
+
+        # Save EpochArray
+        epochs_arr.save(
+            save_fname.replace('_epo', f'_{col}_epo'), overwrite=True)
+    return
+
+
 def process_one_subj(subj, processed_dir=params.PROCESSED_DIR):
     """Load EEG and behavioral data and then perform preprocessing for one
     subject.
@@ -245,7 +268,11 @@ def process_one_subj(subj, processed_dir=params.PROCESSED_DIR):
 
     # Parameterize spectrogram
     sparam_df_fname = os.path.join(processed_dir, f'{subj}_sparam.csv')
-    run_sparam_all_trials(tfr_mt, sparam_df_fname)
+    sparam_df = run_sparam_all_trials(tfr_mt, sparam_df_fname)
+
+    # Extract spectral parameters from model and convert to mne
+    sparam_epo_fname = os.path.join(processed_dir, f'{subj}_epo.fif')
+    convert_sparam_df_to_mne(tfr_mt, sparam_df, sparam_epo_fname)
 
 
 def process_all_subjs(
