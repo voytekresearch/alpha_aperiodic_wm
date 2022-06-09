@@ -93,7 +93,7 @@ def compute_total_power(epochs, save_fname, alpha_band=params.ALPHA_BAND):
 
 def compute_tfr(epochs, save_fname, fmin=params.FMIN, fmax=params.FMAX,
         n_freqs=params.N_FREQS, time_window_len=params.TIME_WINDOW_LEN,
-        decim_fact=params.DECIM_FACT, n_cpus=params.N_CPUS):
+        decim_factor=params.DECIM_FACTOR, n_cpus=params.N_CPUS):
     """Compute time-frequency representation (i.e. spectrogram) using
     multitapers across epochs and channels."""
     # Load file if already computed
@@ -110,7 +110,7 @@ def compute_tfr(epochs, save_fname, fmin=params.FMIN, fmax=params.FMAX,
     # Use multitapers to estimate spectrogram
     tfr_mt = mne.time_frequency.tfr_multitaper(
         epochs.copy(), freqs, n_cycles, n_jobs=n_cpus, return_itc=False,
-        picks='eeg', average=False, decim=decim_fact)
+        picks='eeg', average=False, decim=decim_factor)
 
     # Save spectrogram
     tfr_mt.save(save_fname)

@@ -27,7 +27,7 @@ FMIN = 2  # Hz
 FMAX = 100  # Hz
 N_FREQS = 128
 TIME_WINDOW_LEN = 0.5  # s
-DECIM_FACT = 4  # decimation/downsampling factor
+DECIM_FACTOR = 4  # decimation/downsampling factor
 N_PEAKS = 4
 PEAK_WIDTH_LIMS = (2, 8)
 

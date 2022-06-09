@@ -27,13 +27,15 @@ def load_processed_data(subj, param, processed_dir=params.PROCESSED_DIR):
 
 
 def average_processed_data_within_trial_blocks(
-        beh_data, processed_data, epochs, n_blocks=params.N_BLOCKS):
+        beh_data, processed_data, epochs, n_blocks=params.N_BLOCKS,
+        decim_factor=params.DECIM_FACTOR):
     """Averaging processed data across trials within a block for each
     location bin."""
     # Extract relative variables from data
     pos_bins = beh_data['posBin']
     n_bins = len(set(pos_bins))
-    n_channels, n_timepts = epochs.get_data().shape[-2:]
+    n_channels = epochs.get_data().shape[-2]
+    n_timepts = len(epochs.times[::decim_factor])
 
     # Determine number of trials per location bin
     n_trials_per_bin = np.bincount(pos_bins - 1).min() // n_blocks * n_blocks
@@ -42,6 +44,7 @@ def average_processed_data_within_trial_blocks(
 
     # Calculate processed data for block of trials
     processed_arr = np.zeros((n_blocks, n_bins, n_channels, n_timepts))
+
     for i, val_split in enumerate(idx_split_by_vals):
         # Randomly permute indices
         idx = np.random.permutation(val_split)[:n_trials_per_bin]
@@ -118,8 +121,9 @@ def plot_channel_offset(channel_offset_arr, t_arr, save_fname=None):
 
 
 def train_and_test_one_subj(
-        subj, param, n_blocks=params.N_BLOCKS, n_block_iters=params.N_BLOCK_ITERS,
-        save_dir=params.CHANNEL_OFFSETS_DIR, fig_dir=params.FIG_DIR):
+        subj, param, n_blocks=params.N_BLOCKS,
+        n_block_iters=params.N_BLOCK_ITERS, save_dir=params.CHANNEL_OFFSETS_DIR,
+        fig_dir=params.FIG_DIR, decim_factor=params.DECIM_FACTOR):
     """Reproduce one subject."""
     # Make directories specific to parameter
     save_dir = os.path.join(save_dir, param)
@@ -130,6 +134,11 @@ def train_and_test_one_subj(
     # Load processed data
     epochs, beh_data, processed_data = load_processed_data(subj, param)
 
+    #
+    times = epochs.times
+    if param != 'total_power':
+        times = epochs.times[::decim_factor]
+
     # Load channel offset data if already done
     save_fname = os.path.join(save_dir, f'channel_offset_{subj}.npy')
     if os.path.exists(save_fname):
@@ -139,11 +148,11 @@ def train_and_test_one_subj(
         # Plot channel offset and save
         fig_fname = os.path.join(fig_dir, f'channel_offset_{subj}')
         plot_channel_offset(
-            mean_channel_offset, epochs.times, save_fname=fig_fname)
-        return mean_channel_offset, epochs.times
+            mean_channel_offset, times, save_fname=fig_fname)
+        return mean_channel_offset, times
 
     # Iterate through sets of blocks
-    n_timepts = epochs.get_data().shape[-1]
+    n_timepts = len(epochs.times[::decim_factor])
     mean_channel_offset = np.zeros((
         n_block_iters, n_blocks, IEM().feat_space_range, n_timepts))
     for block_iter in range(n_block_iters):
@@ -178,12 +187,12 @@ def train_and_test_one_subj(
     # Plot channel offset and save
     fig_fname = os.path.join(fig_dir, f'channel_offset_{subj}')
     plot_channel_offset(
-        mean_channel_offset, epochs.times, save_fname=fig_fname)
-    return mean_channel_offset, epochs.times
+        mean_channel_offset, times, save_fname=fig_fname)
+    return mean_channel_offset, times
 
 
 def train_and_test_all_subjs(
-        param, processed_dir=params.PROCESSED_DIR):
+        param, processed_dir=params.PROCESSED_DIR, fig_dir=params.FIG_DIR):
     """Reproduce all subjects."""
     # Get all subject IDs
     subjs = sorted([f.split('_')[0] for f in os.listdir(
@@ -199,6 +208,6 @@ def train_and_test_all_subjs(
     mean_channel_offset_all_subjs = np.mean(mean_channel_offsets, axis=0)
 
     # Plot channel offset across subjects
-    fig_fname = os.path.join(param, 'channel_offset_all')
+    fig_fname = os.path.join(fig_dir, param, 'channel_offset_all')
     plot_channel_offset(
         mean_channel_offset_all_subjs, t_arr, save_fname=fig_fname)
