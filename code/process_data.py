@@ -222,16 +222,8 @@ def convert_sparam_df_to_mne(tfr_mt, sparam_df, save_fname):
             [np.arange(n) for n in sparam_df.index.levshape],
             names=['trial', 'channel', 'timepoint']))
 
-    # Remove trials with any failed fits
-    sparam_df_flat = sparam_df.reset_index()
-    failed_model_fit_trials = sparam_df.loc[sparam_df.isna().all(
-        axis=1)].reset_index()['trial'].unique()
-    sparam_df = sparam_df_flat[~sparam_df_flat['trial'].isin(
-        failed_model_fit_trials)].set_index(['trial', 'channel', 'timepoint'])
-    print(sparam_df.loc[sparam_df.isna().all(axis=1)].shape)
     # Fill remaining NaNs with zero
     sparam_df = sparam_df.fillna(0)
-    print(sparam_df.isna().sum())
 
     # Collapse frequencies of TFR
     info = tfr_mt.copy().average(dim='freqs').info

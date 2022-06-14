@@ -11,3 +11,6 @@ if __name__ == '__main__':
 
     # Decode spatial location from aperiodic exponent
     train_and_test_all_subjs('exponent')
+
+    # Decode spatial location from aperiodic offset
+    train_and_test_all_subjs('offset')
