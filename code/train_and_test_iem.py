@@ -181,7 +181,6 @@ def train_and_test_one_subj(
     mean_channel_offset = np.mean(mean_channel_offset, axis=(0, 1))
 
     # Save data to avoid unnecessary re-processing
-
     np.save(save_fname, mean_channel_offset)
 
     # Plot channel offset and save
@@ -211,3 +210,4 @@ def train_and_test_all_subjs(
     fig_fname = os.path.join(fig_dir, param, 'channel_offset_all')
     plot_channel_offset(
         mean_channel_offset_all_subjs, t_arr, save_fname=fig_fname)
+    return mean_channel_offsets, t_arr
