@@ -96,7 +96,8 @@ def iem_one_block(
 
     # Parallelize training and testing of IEM across time points
     with mp.Pool() as pool:
-        mean_channel_offset, ctf_slope = pool.starmap(iem_one_timepoint, args)
+        pool_out = pool.starmap(iem_one_timepoint, args)
+    mean_channel_offset, ctf_slope = list(zip(*pool_out))
     return np.array(mean_channel_offset).T, np.array(ctf_slope)
 
 
@@ -127,7 +128,7 @@ def plot_channel_offset(channel_offset_arr, t_arr, save_fname=None):
 
 def train_and_test_one_subj(
         subj, param, n_blocks=params.N_BLOCKS,
-        n_block_iters=params.N_BLOCK_ITERS, save_dir=params.CHANNEL_OFFSETS_DIR,
+        n_block_iters=params.N_BLOCK_ITERS, save_dir=params.IEM_OUTPUT_DIR,
         fig_dir=params.FIG_DIR, decim_factor=params.DECIM_FACTOR):
     """Reproduce one subject."""
     # Make directories specific to parameter
