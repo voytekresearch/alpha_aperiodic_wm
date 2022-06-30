@@ -5,6 +5,8 @@
 import os.path
 import multiprocessing as mp
 import numpy as np
+import pandas as pd
+import seaborn as sns
 import matplotlib.pyplot as plt
 import mne
 import params
@@ -124,6 +126,33 @@ def plot_channel_offset(channel_offset_arr, t_arr, save_fname=None):
     # Save if desired
     if save_fname:
         plt.savefig(save_fname)
+
+
+def plot_ctf_slope(ctf_slopes, t_arr, save_fname=None):
+    """Plot channel tuning function (CTF) across time for multiple
+    parameters."""
+    # Make empty list for CTF slope DataFrames
+    ctf_slopes_dfs = []
+
+    # Make DataFrame of CTF slopes by time for each parameter
+    for param, ctf_slopes_one_param in ctf_slopes.items():
+        one_param_df = pd.DataFrame(ctf_slopes_one_param, columns=t_arr)
+        one_param_df['Parameter'] = param
+        one_param_df = one_param_df.melt(
+            id_vars=['Parameter'], var_name='Time (s)', value_name='CTF Slope')
+        ctf_slopes_dfs.append(one_param_df)
+
+    # Combine DataFrames of CTF slopes for each parameter into one big DataFrame
+    ctf_slopes_big_df = pd.concat(ctf_slopes_dfs).reset_index()
+
+    # Plot CTF slope time course for each parameter
+    sns.lineplot(
+        data=ctf_slopes_big_df, hue='Parameter', x='Time (s)', y='CTF Slope')
+
+    # Save if desired
+    if save_fname:
+        plt.savefig(save_fname)
+    return
 
 
 def train_and_test_one_subj(
