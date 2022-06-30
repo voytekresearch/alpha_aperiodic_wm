@@ -71,8 +71,13 @@ def iem_one_timepoint(train_data, train_labels, test_data, test_labels):
     iem.train_model(train_data, train_labels)
 
     # Test IEM using testing data
-    iem.estimate_crf(test_data, test_labels)
-    return iem.mean_channel_offset
+    iem.estimate_ctf(test_data, test_labels)
+
+    # Compute mean channel offset and CTF slope
+    iem.compute_mean_channel_offset()
+    iem.compute_ctf_slope()
+
+    return iem.mean_channel_offset, iem.ctf_slope
 
 
 def iem_one_block(
@@ -91,8 +96,8 @@ def iem_one_block(
 
     # Parallelize training and testing of IEM across time points
     with mp.Pool() as pool:
-        mean_channel_offset = pool.starmap(iem_one_timepoint, args)
-    return np.array(mean_channel_offset).T
+        mean_channel_offset, ctf_slope = pool.starmap(iem_one_timepoint, args)
+    return np.array(mean_channel_offset).T, np.array(ctf_slope)
 
 
 def plot_channel_offset(channel_offset_arr, t_arr, save_fname=None):
@@ -134,27 +139,33 @@ def train_and_test_one_subj(
     # Load processed data
     epochs, beh_data, processed_data = load_processed_data(subj, param)
 
-    #
+    # Get times from epochs, taking account of decimation if applied
     times = epochs.times
     if param != 'total_power':
         times = epochs.times[::decim_factor]
 
     # Load channel offset data if already done
-    save_fname = os.path.join(save_dir, f'channel_offset_{subj}.npy')
-    if os.path.exists(save_fname):
+    channel_offset_fname = os.path.join(save_dir, f'channel_offset_{subj}.npy')
+    ctf_slope_fname = os.path.join(save_dir, f'ctf_slope_{subj}.npy')
+    if os.path.exists(channel_offset_fname) and os.path.exists(
+            ctf_slope_fname):
         # Load offset array
-        mean_channel_offset = np.load(save_fname)
+        mean_channel_offset = np.load(channel_offset_fname)
+
+        # Load slope array
+        mean_ctf_slope = np.load(ctf_slope_fname)
 
         # Plot channel offset and save
         fig_fname = os.path.join(fig_dir, f'channel_offset_{subj}')
         plot_channel_offset(
             mean_channel_offset, times, save_fname=fig_fname)
-        return mean_channel_offset, times
+        return mean_channel_offset, mean_ctf_slope, times
 
     # Iterate through sets of blocks
     n_timepts = len(epochs.times[::decim_factor])
-    mean_channel_offset = np.zeros((
+    channel_offsets = np.zeros((
         n_block_iters, n_blocks, IEM().feat_space_range, n_timepts))
+    ctf_slope = np.zeros((n_block_iters, n_blocks, n_timepts))
     for block_iter in range(n_block_iters):
         # Average processed data within trial blocks
         processed_arr = average_processed_data_within_trial_blocks(
@@ -173,21 +184,23 @@ def train_and_test_one_subj(
             test_labels = IEM().channel_centers
 
             # Train IEMs for block of data
-            mean_channel_offset[
-                block_iter, test_block_num, :, :] = iem_one_block(
+            channel_offsets[block_iter, test_block_num, :, :], \
+                ctf_slope[block_iter, test_block_num, :] = iem_one_block(
                     train_data, train_labels, test_data, test_labels)
 
     # Average across blocks and block iterations
-    mean_channel_offset = np.mean(mean_channel_offset, axis=(0, 1))
+    mean_channel_offset = np.mean(channel_offsets, axis=(0, 1))
+    mean_ctf_slope = np.mean(ctf_slope, axis=(0, 1))
 
     # Save data to avoid unnecessary re-processing
-    np.save(save_fname, mean_channel_offset)
+    np.save(channel_offset_fname, mean_channel_offset)
+    np.save(ctf_slope_fname, mean_ctf_slope)
 
     # Plot channel offset and save
     fig_fname = os.path.join(fig_dir, f'channel_offset_{subj}')
     plot_channel_offset(
         mean_channel_offset, times, save_fname=fig_fname)
-    return mean_channel_offset, times
+    return mean_channel_offset, mean_ctf_slope, times
 
 
 def train_and_test_all_subjs(
@@ -198,16 +211,21 @@ def train_and_test_all_subjs(
         processed_dir) if param in f])
 
     # Process each subject's data
-    mean_channel_offsets = []
+    mean_channel_offsets, mean_ctf_slopes = [], []
     for subj in subjs:
-        subj_mean_channel_offset, t_arr = train_and_test_one_subj(subj, param)
+        subj_mean_channel_offset, subj_mean_ctf_slope, \
+            t_arr = train_and_test_one_subj(subj, param)
         mean_channel_offsets.append(subj_mean_channel_offset)
+        mean_ctf_slopes.append(subj_mean_ctf_slope)
 
     # Combine channel offsets across subjects
     mean_channel_offset_all_subjs = np.mean(mean_channel_offsets, axis=0)
+
+    # Collate CTF slopes across subjects
+    mean_ctf_slopes = np.array(mean_ctf_slopes)
 
     # Plot channel offset across subjects
     fig_fname = os.path.join(fig_dir, param, 'channel_offset_all')
     plot_channel_offset(
         mean_channel_offset_all_subjs, t_arr, save_fname=fig_fname)
-    return mean_channel_offsets, t_arr
+    return mean_channel_offsets, mean_ctf_slopes, t_arr
