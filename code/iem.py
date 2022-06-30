@@ -1,10 +1,12 @@
 """Class that enables training and testing of inverted encoding model (IEM)."""
 
 # Import necessary modules
+from math import ceil
 import numpy as np
 import pandas as pd
 import seaborn as sns
 from scipy.stats import rankdata
+from sklearn.linear_model import LinearRegression
 import params
 
 
@@ -33,10 +35,9 @@ class IEM():
 
         self.design_matrix = None
         self.weights = None
-        self.estimated_crfs = None
         self.estimated_ctfs = None
-        self.channel_offsets = None
         self.mean_channel_offset = None
+        self.ctf_slope = None
 
     def _gen_design_matrix(self, labels):
         """Generate design matrix to serve as teacher in training IEM."""
@@ -53,17 +54,52 @@ class IEM():
         self._gen_design_matrix(train_labels)
         self.fit_iem(train_data)
 
-    def estimate_crf(self, test_data, test_labels):
-        """Estimate channel response function (CRF) from testing data."""
+    def estimate_ctf(self, test_data, test_labels):
+        """Estimate channel tuning functions (CTFs) from testing data."""
         inv = np.linalg.inv(self.weights.T @ self.weights)
-        self.estimated_crfs = inv @ self.weights.T @ test_data
+        estimated_crfs = inv @ self.weights.T @ test_data
         test_labels_idx = rankdata(test_labels, method='dense') - 1
         self.estimated_ctfs = np.array([np.roll(
             crf, -label_idx) for crf, label_idx in zip(
-                self.estimated_crfs.T, test_labels_idx)]).T
-        self.channel_offsets = self.basis_set.T @ self.estimated_ctfs
+                estimated_crfs.T, test_labels_idx)]).T
+
+    def compute_mean_channel_offset(self):
+        """Compute mean channel offset from estimated channel tuning functions
+        (CTFs), which must already be computed."""
+        assert self.estimated_ctfs is not None
+        channel_offsets = self.basis_set.T @ self.estimated_ctfs
         self.mean_channel_offset = np.roll(np.mean(
-            self.channel_offsets, axis=1), self.feat_space_range // 2)
+            channel_offsets, axis=1), self.feat_space_range // 2)
+
+    @staticmethod
+    def _avg_arr_across_equidistant_channels(arr, idx=0, dim=0):
+        """Take mean across channels that are equidistant from the tuned channel
+        in channel tuning functions (CTFs), which must already be computed."""
+        arr = np.moveaxis(arr, dim, 0)
+        arr = np.roll(arr, -idx, axis=0)
+        same_dist_to_tuned = np.array(list(zip(arr.take(indices=range(len(
+            arr)//2+1, len(arr)), axis=0), arr.take(indices=range(ceil(
+                len(arr)/2)-1, 0, -1), axis=0)))[::-1])
+        lst = [np.expand_dims(arr.take(indices=idx, axis=0), axis=0), np.mean(
+            same_dist_to_tuned, axis=0+1), arr.take(indices=len(
+                arr)//2, axis=0)[not bool(len(arr) % 2)]]
+        arr = np.moveaxis(arr, 0, dim)
+        return np.concatenate(lst)
+
+    def compute_ctf_slope(self):
+        """Compute the slope of the channel tuning functions (CTF), which must
+        be already computed, in order to gauge stimulus selectivity."""
+        assert self.estimated_ctfs is not None
+        dist_from_tuned = np.min([self.channel_centers, np.abs(
+            self.channel_centers - self.feat_space_range)], axis=0)
+        dist_from_tuned_avg = self._avg_arr_across_equidistant_channels(
+            dist_from_tuned, idx=0, dim=0)
+        ctf_avg_across_equidist_chs = self._avg_arr_across_equidistant_channels(
+            self.estimated_ctfs, idx=0, dim=1)
+        lin_model = LinearRegression()
+        lin_model.fit(dist_from_tuned_avg.reshape(-1, 1), np.mean(
+            ctf_avg_across_equidist_chs, axis=1))
+        self.ctf_slope = lin_model.coef_[0]
 
     def plot_basis_set(self):
         """Plot basis set for IEM model."""
