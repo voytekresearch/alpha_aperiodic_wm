@@ -9,15 +9,11 @@ from train_and_test_iem import plot_ctf_slope, train_and_test_all_subjs
 
 if __name__ == '__main__':
     # Decode spatial location from alpha oscillatory power
-    pw_channel_offsets, pw_ctf_slopes, t_arr = train_and_test_all_subjs('PW')
+    pw_channel_offsets, pw_ctf_slopes, _ = train_and_test_all_subjs('PW')
 
     # Decode spatial location from aperiodic exponent
     exp_channel_offsets, exp_ctf_slopes, _ = train_and_test_all_subjs(
         'exponent')
-
-    # Decode spatial location from aperiodic offset
-    offset_channel_offsets, offset_ctf_slopes, _ = train_and_test_all_subjs(
-        'offset')
 
     # Plot CTF slope time courses for parameters from spectral parameterization
     # model
