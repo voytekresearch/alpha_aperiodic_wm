@@ -97,8 +97,8 @@ class IEM():
         ctf_avg_across_equidist_chs = self._avg_arr_across_equidistant_channels(
             self.estimated_ctfs, idx=0, dim=0)
         lin_model = LinearRegression()
-        lin_model.fit(dist_from_tuned_avg.reshape(-1, 1), np.mean(
-            ctf_avg_across_equidist_chs, axis=1))
+        lin_model.fit(np.arange(1, len(dist_from_tuned_avg) + 1).reshape(
+            -1, 1), np.mean(ctf_avg_across_equidist_chs, axis=1))
         self.ctf_slope = lin_model.coef_[0]
 
     def plot_basis_set(self):
