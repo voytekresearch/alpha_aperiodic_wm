@@ -146,6 +146,7 @@ def plot_ctf_slope(ctf_slopes, t_arr, save_fname=None):
     ctf_slopes_big_df = pd.concat(ctf_slopes_dfs).reset_index()
 
     # Plot CTF slope time course for each parameter
+    plt.figure()
     sns.lineplot(
         data=ctf_slopes_big_df, hue='Parameter', x='Time (s)', y='CTF Slope')
 

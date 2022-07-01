@@ -23,6 +23,5 @@ if __name__ == '__main__':
     # model
     ctf_slopes_fname = os.path.join(params.FIG_DIR, 'ctf_slopes')
     ctf_slopes = {
-        'Power': pw_ctf_slopes, 'Exponent': exp_ctf_slopes,
-        'Offset': offset_ctf_slopes}
+        'Power': pw_ctf_slopes, 'Exponent': exp_ctf_slopes}
     plot_ctf_slope(ctf_slopes, t_arr, save_fname=ctf_slopes_fname)

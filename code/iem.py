@@ -95,7 +95,7 @@ class IEM():
         dist_from_tuned_avg = self._avg_arr_across_equidistant_channels(
             dist_from_tuned, idx=0, dim=0)
         ctf_avg_across_equidist_chs = self._avg_arr_across_equidistant_channels(
-            self.estimated_ctfs, idx=0, dim=1)
+            self.estimated_ctfs, idx=0, dim=0)
         lin_model = LinearRegression()
         lin_model.fit(dist_from_tuned_avg.reshape(-1, 1), np.mean(
             ctf_avg_across_equidist_chs, axis=1))
