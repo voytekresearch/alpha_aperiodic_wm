@@ -13,11 +13,18 @@ import params
 from iem import IEM
 
 
-def load_processed_data(subj, param, processed_dir=params.PROCESSED_DIR):
+def load_processed_data(
+        subj, param, processed_dir=params.PROCESSED_DIR,
+        decim_factor=params.DECIM_FACTOR):
     """Load processed EEG and behavioral data for one subject."""
     # Load epoched EEG data
     epochs = mne.read_epochs(os.path.join(
         processed_dir, f'{subj}_eeg_data_epo.fif'), preload=True)
+
+    # Get times from epochs, taking account of decimation if applied
+    times = epochs.times
+    if param != 'total_power':
+        times = epochs.times[::decim_factor]
 
     # Load behavioral data
     beh_data = np.load(os.path.join(processed_dir, f'{subj}_beh_data.npz'))
@@ -25,19 +32,18 @@ def load_processed_data(subj, param, processed_dir=params.PROCESSED_DIR):
     # Load processed data
     processed_data = mne.read_epochs(os.path.join(
         processed_dir, f'{subj}_{param}_epo.fif'))
-    return epochs, beh_data, processed_data
+    return epochs, times, beh_data, processed_data
 
 
 def average_processed_data_within_trial_blocks(
-        beh_data, processed_data, epochs, n_blocks=params.N_BLOCKS,
-        decim_factor=params.DECIM_FACTOR):
+        epochs, times, beh_data, processed_data, n_blocks=params.N_BLOCKS):
     """Averaging processed data across trials within a block for each
     location bin."""
     # Extract relative variables from data
     pos_bins = beh_data['posBin']
     n_bins = len(set(pos_bins))
     n_channels = epochs.get_data().shape[-2]
-    n_timepts = len(epochs.times[::decim_factor])
+    n_timepts = len(times)
 
     # Determine number of trials per location bin
     n_trials_per_bin = np.bincount(pos_bins - 1).min() // n_blocks * n_blocks
@@ -159,7 +165,7 @@ def plot_ctf_slope(ctf_slopes, t_arr, save_fname=None):
 def train_and_test_one_subj(
         subj, param, n_blocks=params.N_BLOCKS,
         n_block_iters=params.N_BLOCK_ITERS, save_dir=params.IEM_OUTPUT_DIR,
-        fig_dir=params.FIG_DIR, decim_factor=params.DECIM_FACTOR):
+        fig_dir=params.FIG_DIR):
     """Reproduce one subject."""
     # Make directories specific to parameter
     save_dir = os.path.join(save_dir, param)
@@ -168,12 +174,7 @@ def train_and_test_one_subj(
     os.makedirs(fig_dir, exist_ok=True)
 
     # Load processed data
-    epochs, beh_data, processed_data = load_processed_data(subj, param)
-
-    # Get times from epochs, taking account of decimation if applied
-    times = epochs.times
-    if param != 'total_power':
-        times = epochs.times[::decim_factor]
+    epochs, times, beh_data, processed_data = load_processed_data(subj, param)
 
     # Load channel offset data if already done
     channel_offset_fname = os.path.join(save_dir, f'channel_offset_{subj}.npy')
@@ -193,14 +194,14 @@ def train_and_test_one_subj(
         return mean_channel_offset, mean_ctf_slope, times
 
     # Iterate through sets of blocks
-    n_timepts = len(epochs.times[::decim_factor])
+    n_timepts = len(times)
     channel_offsets = np.zeros((
         n_block_iters, n_blocks, IEM().feat_space_range, n_timepts))
     ctf_slope = np.zeros((n_block_iters, n_blocks, n_timepts))
     for block_iter in range(n_block_iters):
         # Average processed data within trial blocks
         processed_arr = average_processed_data_within_trial_blocks(
-            beh_data, processed_data, epochs)
+            epochs, times, beh_data, processed_data)
 
         # Iterate through blocks
         for test_block_num in range(n_blocks):
