@@ -134,7 +134,7 @@ def plot_channel_offset(channel_offset_arr, t_arr, save_fname=None):
         plt.savefig(save_fname)
 
 
-def plot_ctf_slope(ctf_slopes, t_arr, save_fname=None):
+def plot_ctf_slope(ctf_slopes, t_arr, palette=None, save_fname=None):
     """Plot channel tuning function (CTF) across time for multiple
     parameters."""
     # Make empty list for CTF slope DataFrames
@@ -154,7 +154,9 @@ def plot_ctf_slope(ctf_slopes, t_arr, save_fname=None):
     # Plot CTF slope time course for each parameter
     plt.figure()
     sns.lineplot(
-        data=ctf_slopes_big_df, hue='Parameter', x='Time (s)', y='CTF Slope')
+        data=ctf_slopes_big_df, hue='Parameter', x='Time (s)', y='CTF Slope',
+        palette=palette)
+    sns.despine()
 
     # Save if desired
     if save_fname:
