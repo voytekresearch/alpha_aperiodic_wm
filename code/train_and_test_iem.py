@@ -138,6 +138,7 @@ def plot_channel_offset(channel_offset_arr, t_arr, save_fname=None):
     # Save if desired
     if save_fname:
         plt.savefig(save_fname)
+    plt.close()
 
 
 def plot_ctf_slope(ctf_slopes, t_arr, palette=None, save_fname=None):
@@ -167,7 +168,7 @@ def plot_ctf_slope(ctf_slopes, t_arr, palette=None, save_fname=None):
     # Save if desired
     if save_fname:
         plt.savefig(save_fname)
-    return
+    plt.close()
 
 
 def train_and_test_one_subj(
