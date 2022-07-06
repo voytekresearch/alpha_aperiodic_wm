@@ -14,8 +14,8 @@ from iem import IEM
 
 
 def load_processed_data(
-        subj, param, processed_dir=params.PROCESSED_DIR,
-        decim_factor=params.DECIM_FACTOR):
+        subj, param, threshold_param=None, threshold_val=None,
+        processed_dir=params.PROCESSED_DIR, decim_factor=params.DECIM_FACTOR):
     """Load processed EEG and behavioral data for one subject."""
     # Load epoched EEG data
     epochs = mne.read_epochs(os.path.join(
@@ -31,7 +31,13 @@ def load_processed_data(
 
     # Load processed data
     processed_data = mne.read_epochs(os.path.join(
-        processed_dir, f'{subj}_{param}_epo.fif'))
+        processed_dir, f'{subj}_{param}_epo.fif')).get_data()
+
+    # Load processed data for threhsold parameter
+    if threshold_param is not None and threshold_val is not None:
+        thresh_data =  mne.read_epochs(os.path.join(
+        processed_dir, f'{subj}_{threshold_param}_epo.fif')).get_data()
+        processed_data[thresh_data < threshold_val] = np.nan
     return epochs, times, beh_data, processed_data
 
 
@@ -58,8 +64,8 @@ def average_processed_data_within_trial_blocks(
         idx = np.random.permutation(val_split)[:n_trials_per_bin]
 
         # Average processed data across block of trials
-        block_avg = np.real(np.mean(processed_data.get_data(
-            )[idx, :, :].reshape(-1, n_blocks, n_channels, n_timepts), axis=0))
+        block_avg = np.real(np.nanmean(processed_data[idx, :, :].reshape(
+            -1, n_blocks, n_channels, n_timepts), axis=0))
 
         # Add block-averaged processed data to array
         processed_arr[:, i, :, :] = block_avg
@@ -165,18 +171,23 @@ def plot_ctf_slope(ctf_slopes, t_arr, palette=None, save_fname=None):
 
 
 def train_and_test_one_subj(
-        subj, param, n_blocks=params.N_BLOCKS,
-        n_block_iters=params.N_BLOCK_ITERS, save_dir=params.IEM_OUTPUT_DIR,
-        fig_dir=params.FIG_DIR):
+        subj, param, threshold_param=None, threshold_val=None,
+        n_blocks=params.N_BLOCKS, n_block_iters=params.N_BLOCK_ITERS,
+        save_dir=params.IEM_OUTPUT_DIR, fig_dir=params.FIG_DIR):
     """Reproduce one subject."""
     # Make directories specific to parameter
     save_dir = os.path.join(save_dir, param)
-    os.makedirs(save_dir, exist_ok=True)
     fig_dir = os.path.join(fig_dir, param)
+    if threshold_param is not None and threshold_val is not None:
+        save_dir = os.path.join(save_dir, f'{threshold_param}>{threshold_val}')
+        fig_dir = os.path.join(fig_dir, f'{threshold_param}>{threshold_val}')
+    os.makedirs(save_dir, exist_ok=True)
     os.makedirs(fig_dir, exist_ok=True)
 
     # Load processed data
-    epochs, times, beh_data, processed_data = load_processed_data(subj, param)
+    epochs, times, beh_data, processed_data = load_processed_data(
+        subj, param, threshold_param=threshold_param,
+        threshold_val=threshold_val)
 
     # Load channel offset data if already done
     channel_offset_fname = os.path.join(save_dir, f'channel_offset_{subj}.npy')
@@ -238,7 +249,8 @@ def train_and_test_one_subj(
 
 
 def train_and_test_all_subjs(
-        param, processed_dir=params.PROCESSED_DIR, fig_dir=params.FIG_DIR):
+        param, threshold_param=None, threshold_val=None,
+        processed_dir=params.PROCESSED_DIR, fig_dir=params.FIG_DIR):
     """Reproduce all subjects."""
     # Get all subject IDs
     subjs = sorted([f.split('_')[0] for f in os.listdir(
@@ -248,7 +260,9 @@ def train_and_test_all_subjs(
     mean_channel_offsets, mean_ctf_slopes = [], []
     for subj in subjs:
         subj_mean_channel_offset, subj_mean_ctf_slope, \
-            t_arr = train_and_test_one_subj(subj, param)
+            t_arr = train_and_test_one_subj(
+                subj, param, threshold_param=threshold_param,
+                threshold_val=threshold_val)
         mean_channel_offsets.append(subj_mean_channel_offset)
         mean_ctf_slopes.append(subj_mean_ctf_slope)
 

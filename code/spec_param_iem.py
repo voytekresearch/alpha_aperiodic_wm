@@ -13,11 +13,12 @@ if __name__ == '__main__':
         'total_power')
 
     # Decode spatial location from alpha oscillatory power
-    pw_channel_offsets, pw_ctf_slopes, t_arr = train_and_test_all_subjs('PW')
+    pw_channel_offsets, pw_ctf_slopes, t_arr = train_and_test_all_subjs(
+        'PW', threshold_param='R^2', threshold_val=0.5)
 
     # Decode spatial location from aperiodic exponent
     exp_channel_offsets, exp_ctf_slopes, _ = train_and_test_all_subjs(
-        'exponent')
+        'exponent', threshold_param='R^2', threshold_val=0.5)
 
     # Decimate total alpha power IEM results
     if tot_pw_ctf_slopes.shape[-1] > pw_ctf_slopes.shape[-1]:
