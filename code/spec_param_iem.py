@@ -14,11 +14,11 @@ if __name__ == '__main__':
 
     # Decode spatial location from alpha oscillatory power
     pw_channel_offsets, pw_ctf_slopes, t_arr = train_and_test_all_subjs(
-        'PW', threshold_param='R^2', threshold_val=0.5)
+        'PW')
 
     # Decode spatial location from aperiodic exponent
     exp_channel_offsets, exp_ctf_slopes, _ = train_and_test_all_subjs(
-        'exponent', threshold_param='R^2', threshold_val=0.5)
+        'exponent')
 
     # Decimate total alpha power IEM results
     if tot_pw_ctf_slopes.shape[-1] > pw_ctf_slopes.shape[-1]:
@@ -26,7 +26,8 @@ if __name__ == '__main__':
 
     # Plot CTF slope time courses for parameters from spectral parameterization
     # model
-    ctf_slopes_fname = os.path.join(params.FIG_DIR, 'ctf_slopes')
+
+    ctf_slopes_fname = os.path.join(params.FIG_DIR, 'ctf_slopes.png')
     ctf_slopes = {
         'Alpha total power': -tot_pw_ctf_slopes,
         'Alpha oscillatory power': -pw_ctf_slopes,

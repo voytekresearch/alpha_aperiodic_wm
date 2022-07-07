@@ -274,7 +274,10 @@ def train_and_test_all_subjs(
     mean_ctf_slopes = np.array(mean_ctf_slopes)
 
     # Plot channel offset across subjects
-    fig_fname = os.path.join(fig_dir, param, 'channel_offset_all')
+    fig_dir = os.path.join(fig_dir, param)
+    if threshold_param is not None and threshold_val is not None:
+        fig_dir = os.path.join(fig_dir, f'{threshold_param}>{threshold_val}')
+    fig_fname = os.path.join(fig_dir, 'channel_offset_all')
     plot_channel_offset(
         mean_channel_offset_all_subjs, t_arr, save_fname=fig_fname)
     return mean_channel_offsets, mean_ctf_slopes, t_arr
