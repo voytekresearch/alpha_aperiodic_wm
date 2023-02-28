@@ -152,17 +152,24 @@ def plot_ctf_slope(ctf_slopes, t_arr, palette=None, save_fname=None):
         one_param_df = pd.DataFrame(ctf_slopes_one_param, columns=t_arr)
         one_param_df['Parameter'] = param
         one_param_df = one_param_df.melt(
-            id_vars=['Parameter'], var_name='Time (s)', value_name='CTF Slope')
+            id_vars=['Parameter'], var_name='Time (s)', value_name='CTF slope')
         ctf_slopes_dfs.append(one_param_df)
 
     # Combine DataFrames of CTF slopes for each parameter into one big DataFrame
     ctf_slopes_big_df = pd.concat(ctf_slopes_dfs).reset_index()
 
     # Plot CTF slope time course for each parameter
-    plt.figure()
+    plt.figure(figsize=(10, 6))
     sns.lineplot(
-        data=ctf_slopes_big_df, hue='Parameter', x='Time (s)', y='CTF Slope',
+        data=ctf_slopes_big_df, hue='Parameter', x='Time (s)', y='CTF slope',
         palette=palette)
+    plt.axvline(0.0, c='gray', ls='--')
+    plt.axvline(0.25, c='gray', ls='--')
+    plt.axvline(2.0, c='gray', ls='--')
+    plt.xlabel('Time (s)', size=20)
+    plt.ylabel('CTF slope', size=20)
+    plt.xticks(size=12)
+    plt.yticks(size=12)
     sns.despine()
 
     # Save if desired
