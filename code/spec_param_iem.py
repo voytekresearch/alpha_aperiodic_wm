@@ -26,10 +26,10 @@ if __name__ == '__main__':
 
     # Plot CTF slope time courses for parameters from spectral parameterization
     # model
-
     ctf_slopes_fname = os.path.join(params.FIG_DIR, 'ctf_slopes.png')
     ctf_slopes = {
         'Alpha total power': -tot_pw_ctf_slopes,
         'Alpha oscillatory power': -pw_ctf_slopes,
         'Aperiodic exponent': -exp_ctf_slopes}
-    plot_ctf_slope(ctf_slopes, t_arr, palette='Set1', save_fname=ctf_slopes_fname)
+    plot_ctf_slope(
+        ctf_slopes, t_arr, palette='Set1', save_fname=ctf_slopes_fname)

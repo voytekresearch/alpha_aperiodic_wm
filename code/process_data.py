@@ -1,12 +1,12 @@
-"""Load EEG and behavioral data from MAT files downloaded from OSF
-(https://osf.io/bwzfj/)"""
+"""Load EEG and behavioral data from MAT files acquired from Awh/Vogel lab."""
 
 # Import necessary modules
 import os
 import os.path
 import time
 import mne
-from mne.externals.pymatreader import read_mat
+from frozendict import frozendict
+from pymatreader import read_mat
 import ray
 import numpy as np
 from fooof import FOOOFGroup, fit_fooof_3d
@@ -16,53 +16,132 @@ import pandas as pd
 import params
 
 
-def load_eeg_data(
-    subj, epochs_fname, download_dir=params.DOWNLOAD_DIR,
-    eeg_dir=params.EEG_DIR, experiment_num=params.EXPERIMENT_NUM):
-    """Load EEG data for one subject."""
-    # Load data from MAT file
-    eeg_mat_fname = os.path.join(
-        download_dir, f'exp{experiment_num}', eeg_dir, f'{subj}_EEG.mat')
-    eeg_data = read_mat(eeg_mat_fname)['eeg']
+def _index_nested_object(nested, indices, subject, return_num_subjects=False):
+    """Index nested Python object with tuple."""
+    # If given indices are not in fact indices, return them as the desired value
+    if not isinstance(indices, tuple):
+        return indices
 
-    # Load epochs file if already created
-    if os.path.exists(epochs_fname):
-        return eeg_data, mne.read_epochs(epochs_fname)
+    # Zoom in to next level
+    if isinstance(nested, dict):
+        if indices[0] not in nested.keys():
+            return None
+        nested = nested[indices[0]]
+        indices = indices[1:]
+    elif isinstance(nested, list):
+        # Return number of subjects if desired
+        if return_num_subjects:
+            return len(nested)
+        nested = nested[subject]
 
-    # Create epochs array from loaded MAT file
-    info = mne.create_info(
-        eeg_data['chanLabels'], eeg_data['sampRate'], ch_types='eeg')
-    epochs = mne.EpochsArray(
-        eeg_data['data'], info, tmin=eeg_data['preTime'] / 1000).drop(
-            eeg_data['arf']['artIndCleaned'].astype(bool))
-    assert epochs.times[-1] == eeg_data['postTime'] / 1000
+    # Return subject data if at end of nested indices
+    if not indices:
+        if isinstance(nested, list):
+            # Return number of subjects if desired
+            if return_num_subjects:
+                return len(nested)
+            if not isinstance(nested[0], str):
+                nested = nested[subject]
+        return nested
 
-    # Save epochs
-    epochs.save(epochs_fname)
-    return eeg_data, epochs
+    # Continue with recursion if nested indices remain
+    return _index_nested_object(nested, indices, subject, return_num_subjects)
 
 
-def load_beh_data(
-    subj, eeg_data, save_fname, download_dir=params.DOWNLOAD_DIR,
-    experiment_num=params.EXPERIMENT_NUM):
-    """Load behavioral data for one subject."""
-    # Load data if already computed
-    if os.path.exists(save_fname):
-        return np.load(save_fname)
+def split_data_by_subject(
+        experiment, experiment_vars=frozendict(params.EXPERIMENT_VARS),
+        num_subjects=frozendict(params.NUM_SUBJECTS),
+        bad_subjects=frozendict(params.BAD_SUBJECTS),
+        download_dir=params.DOWNLOAD_DIR, processed_dir=params.PROCESSED_DIR):
+    """Split data for experiments into individual subjects."""
+    # Make directory if necessary
+    os.makedirs(processed_dir, exist_ok=True)
 
-    # Load data from MAT file
-    beh_mat_fname = os.path.join(
-        download_dir, f'exp{experiment_num}', 'Data',
-        f'{subj}_MixModel_wBias.mat')
-    beh_data = read_mat(beh_mat_fname)['beh']['trial']
+    # Restrict experiment variables to selected experiment
+    num_subjects = num_subjects[experiment]
+    bad_subjects = bad_subjects[experiment]
+    experiment_vars = experiment_vars[experiment]
 
-    # Remove trials with artifacts
-    beh_data_cleaned = {k: val[~eeg_data['arf']['artIndCleaned'].astype(
-        bool)] for k, val in beh_data.items()}
+    # Check if experiment already processed to avoid loading large MAT file
+    # if possible
+    num_processed_files = len([f for f in os.listdir(
+        processed_dir) if experiment in f])
+    if num_subjects == num_processed_files / 2:
+        return
 
-    # Save data
-    np.savez(save_fname, **beh_data_cleaned)
-    return beh_data_cleaned
+    # Load data from experiment
+    mat_fn = f'{download_dir}/spatialData_{experiment}.mat'
+    exp_data = read_mat(mat_fn)
+
+    # Process data for each subject
+    for subject in range(num_subjects):
+        # Skip subject if bad subject
+        if subject in bad_subjects:
+            continue
+
+        # Extract data from big nested dictionary
+        eeg_data = _index_nested_object(
+            exp_data, experiment_vars['data'], subject)
+
+        # Move on to next subject if no data found
+        if eeg_data is None:
+            continue
+
+        # Extract relevant experimental variables from big nested dictionary
+        ch_labels = _index_nested_object(
+            exp_data, experiment_vars['ch_labels'], subject)
+        bad_trials = _index_nested_object(
+            exp_data, experiment_vars['bad_trials'], subject).astype(bool)
+        sfreq = _index_nested_object(
+            exp_data, experiment_vars['sfreq'], subject)
+        pre_time = _index_nested_object(
+            exp_data, experiment_vars['pre_time'], subject)
+        post_time = _index_nested_object(
+            exp_data, experiment_vars['post_time'], subject)
+        pos_bin = _index_nested_object(
+            exp_data, experiment_vars['pos_bin'], subject)
+        bad_electrodes = _index_nested_object(
+            exp_data, experiment_vars['bad_electrodes'], subject)
+        art_pre_time = _index_nested_object(
+            exp_data, experiment_vars['art_pre_time'], subject)
+        art_post_time = _index_nested_object(
+            exp_data, experiment_vars['art_post_time'], subject)
+
+        # Create epochs array from loaded MAT file for each subject if needed
+        epochs_fname = f'{processed_dir}/{experiment}_{subject}_eeg_epo.fif'
+        if not os.path.exists(epochs_fname):
+            # Create info, labeling bad electrodes
+            info = mne.create_info(ch_labels, sfreq, ch_types='eeg')
+            if bad_electrodes is None:
+                bad_electrodes = []
+            info['bads'] = [e for e in list(bad_electrodes) if e in ch_labels]
+
+            # Turn data array into MNE EpochsArray with proper cropping applied
+            epochs = mne.EpochsArray(
+                eeg_data, info, tmin=-np.abs(pre_time)/1000)
+            if epochs.times[-1] != post_time / 1000:
+                epochs = mne.EpochsArray(
+                    eeg_data, info, tmin=-np.abs(art_pre_time)/1000)
+            else:
+                # Crop data
+                if art_pre_time:
+                    epochs.crop(tmin=-np.abs(
+                        art_pre_time)/1000, tmax=art_post_time/1000)
+                    # Make sure times are consistent
+                    assert epochs.times[-1] == art_post_time / 1000
+
+            # Drop bad trials
+            epochs = epochs.drop(bad_trials)
+
+            # Save epochs
+            epochs.save(epochs_fname)
+
+        # Remove trials with artifacts
+        beh_fname = f'{processed_dir}/{experiment}_{subject}_beh.npy'
+        if not os.path.exists(beh_fname):
+            beh_data = pos_bin.flat[~bad_trials]
+            np.save(beh_fname, beh_data)
+    return
 
 
 def compute_total_power(epochs, save_fname, alpha_band=params.ALPHA_BAND):
@@ -167,7 +246,7 @@ def run_sparam_one_trial(
     return sparam_df_one_trial
 
 
-def run_sparam_all_trials(tfr, save_fname, n_cpus=params.N_CPUS,):
+def run_sparam_all_trials(tfr, save_fname, n_cpus=params.N_CPUS):
     """Parameterize the neural power spectra for each time point in the
     spectrogram. Spectrogram (tfr) should have shape of (n_trials, n_channels,
     n_freqs, n_timepoints)."""
@@ -245,7 +324,8 @@ def convert_sparam_df_to_mne(tfr_mt, sparam_df, save_fname):
     return
 
 
-def process_one_subj(subj, processed_dir=params.PROCESSED_DIR):
+def process_one_subject(
+        subject_fname, processed_dir=params.PROCESSED_DIR):
     """Load EEG and behavioral data and then perform preprocessing for one
     subject.
 
@@ -256,48 +336,49 @@ def process_one_subj(subj, processed_dir=params.PROCESSED_DIR):
     Preprocessing #2: Use multitaper to estimate PSD with sliding window,
     spectral parameterization to fit periodic and aperiodic components, and then
     isolate aperiodic exponent and alpha oscillatory power."""
+    # Extract experiment and subject from filename
+    experiment, subject = subject_fname.split('_')[:2]
+    subject = int(subject)
+
     # Make directory to save data to if necessary
     os.makedirs(processed_dir, exist_ok=True)
 
     # Load subject's EEG data
-    epochs_fname = os.path.join(processed_dir, f'{subj}_eeg_data_epo.fif')
-    eeg_data, epochs = load_eeg_data(subj, epochs_fname)
-
-    # Load subject's behavioral data
-    beh_data_fname = os.path.join(processed_dir, f'{subj}_beh_data.npz')
-    load_beh_data(subj, eeg_data, beh_data_fname)
+    epochs_fname = f'{processed_dir}/{experiment}_{subject}_eeg_epo.fif'
+    epochs = mne.read_epochs(epochs_fname)
 
     # Calculate total power
-    total_power_fname = os.path.join(
-        processed_dir, f'{subj}_total_power_epo.fif')
+    total_power_fname = f'{processed_dir}/{subject}_total_power_epo.fif'
     compute_total_power(epochs, total_power_fname)
 
     # Compute spectrogram
-    tfr_fname = os.path.join(processed_dir, f'{subj}-tfr.h5')
+    tfr_fname = f'{processed_dir}/{subject}-tfr.h5'
     tfr_mt = compute_tfr(epochs, tfr_fname)
 
     # Parameterize spectrogram
-    sparam_df_fname = os.path.join(processed_dir, f'{subj}_sparam.csv')
+    sparam_df_fname = f'{processed_dir}/{subject}_sparam.csv'
     sparam_df = run_sparam_all_trials(tfr_mt, sparam_df_fname)
 
     # Extract spectral parameters from model and convert to mne
-    sparam_epo_fname = os.path.join(processed_dir, f'{subj}_epo.fif')
+    sparam_epo_fname = f'{processed_dir}/{subject}_epo.fif'
     convert_sparam_df_to_mne(tfr_mt, sparam_df, sparam_epo_fname)
 
 
-def process_all_subjs(
-    experiment_num=params.EXPERIMENT_NUM, eeg_dir=params.EEG_DIR,
-    download_dir=params.DOWNLOAD_DIR):
+def process_all_subjects(
+        download_dir=params.DOWNLOAD_DIR, processed_dir=params.PROCESSED_DIR):
     """Load EEG and behavioral data and then perform preprocessing for all
     subjects."""
-    # Get all subject IDs
-    subjs = sorted([f.split('_')[0] for f in os.listdir(os.path.join(
-        download_dir, f'exp{experiment_num}', eeg_dir)) if 'REJECT' not in f])
+    # Split data by subjects if necessary
+    experiments = set([f.split('.')[-2].split('_')[-1] for f in os.listdir(
+        download_dir) if '.mat' in f])
+    for experiment in experiments:
+        split_data_by_subject(experiment)
 
     # Process each subject's data
-    for subj in subjs:
-        process_one_subj(subj)
+    subject_files = os.listdir(processed_dir)
+    for subject_fname in subject_files:
+        process_one_subject(subject_fname)
 
 
 if __name__ == '__main__':
-    process_all_subjs()
+    process_all_subjects()
