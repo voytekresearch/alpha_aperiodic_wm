@@ -51,7 +51,6 @@ def _index_nested_object(nested, indices, subject, return_num_subjects=False):
 def split_data_by_subject(
         experiment, experiment_vars=frozendict(params.EXPERIMENT_VARS),
         num_subjects=frozendict(params.NUM_SUBJECTS),
-        bad_subjects=frozendict(params.BAD_SUBJECTS),
         download_dir=params.DOWNLOAD_DIR, processed_dir=params.PROCESSED_DIR):
     """Split data for experiments into individual subjects."""
     # Make directory if necessary
@@ -59,7 +58,6 @@ def split_data_by_subject(
 
     # Restrict experiment variables to selected experiment
     num_subjects = num_subjects[experiment]
-    bad_subjects = bad_subjects[experiment]
     experiment_vars = experiment_vars[experiment]
 
     # Check if experiment already processed to avoid loading large MAT file
@@ -75,16 +73,13 @@ def split_data_by_subject(
 
     # Process data for each subject
     for subject in range(num_subjects):
-        # Skip subject if bad subject
-        if subject in bad_subjects:
-            continue
-
         # Extract data from big nested dictionary
         eeg_data = _index_nested_object(
             exp_data, experiment_vars['data'], subject)
 
         # Move on to next subject if no data found
         if eeg_data is None:
+            print('No EEG data')
             continue
 
         # Extract relevant experimental variables from big nested dictionary
