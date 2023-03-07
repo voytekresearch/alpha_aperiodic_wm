@@ -1,0 +1,11 @@
+fooof==1.0.0
+frozendict==2.0.2
+matplotlib==3.5.3
+mne==1.1.0
+numpy==1.21.6
+pandas==1.5.0
+pymatreader==0.0.30
+ray==1.12.0
+scikit_learn==1.2.1
+scipy==1.9.1
+seaborn==0.11.2
