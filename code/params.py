@@ -4,9 +4,12 @@
 import numpy as np
 
 # Directories
-DATA_DIR = '/Volumes/T7 Shield/awhvogel_composite'
+DATA_DIR = '/home/AD/abender'
 DOWNLOAD_DIR = f'{DATA_DIR}/by_experiment'
 PROCESSED_DIR = f'{DATA_DIR}/by_subject'
+TOTAL_POWER_DIR = f'{DATA_DIR}/total_power'
+TFR_DIR = f'{DATA_DIR}/tfr'
+SPARAM_DIR = f'{DATA_DIR}/sparam'
 IEM_OUTPUT_DIR = f'{DATA_DIR}/iem_output'
 EEG_DIR = 'EEG'
 FIG_DIR = 'figs'

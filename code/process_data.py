@@ -320,7 +320,9 @@ def convert_sparam_df_to_mne(tfr_mt, sparam_df, save_fname):
 
 
 def process_one_subject(
-        subject_fname, processed_dir=params.PROCESSED_DIR):
+        subject_fname, processed_dir=params.PROCESSED_DIR,
+        total_power_dir=params.TOTAL_POWER_DIR, tfr_dir=params.TFR_DIR,
+        sparam_dir=params.SPARAM_DIR):
     """Load EEG and behavioral data and then perform preprocessing for one
     subject.
 
@@ -343,19 +345,19 @@ def process_one_subject(
     epochs = mne.read_epochs(epochs_fname)
 
     # Calculate total power
-    total_power_fname = f'{processed_dir}/{subject}_total_power_epo.fif'
+    total_power_fname = f'{total_power_dir}/{subject}_total_power_epo.fif'
     compute_total_power(epochs, total_power_fname)
 
     # Compute spectrogram
-    tfr_fname = f'{processed_dir}/{subject}-tfr.h5'
+    tfr_fname = f'{tfr_dir}/{subject}-tfr.h5'
     tfr_mt = compute_tfr(epochs, tfr_fname)
 
     # Parameterize spectrogram
-    sparam_df_fname = f'{processed_dir}/{subject}_sparam.csv'
+    sparam_df_fname = f'{sparam_dir}/{subject}_sparam.csv'
     sparam_df = run_sparam_all_trials(tfr_mt, sparam_df_fname)
 
     # Extract spectral parameters from model and convert to mne
-    sparam_epo_fname = f'{processed_dir}/{subject}_epo.fif'
+    sparam_epo_fname = f'{sparam_dir}/{subject}_epo.fif'
     convert_sparam_df_to_mne(tfr_mt, sparam_df, sparam_epo_fname)
 
 
