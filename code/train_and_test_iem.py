@@ -16,7 +16,34 @@ from iem import IEM
 def load_processed_data(
         subj, param, threshold_param=None, threshold_val=None,
         processed_dir=params.PROCESSED_DIR, decim_factor=params.DECIM_FACTOR):
-    """Load processed EEG and behavioral data for one subject."""
+    """Load processed EEG and behavioral data for one subject.
+
+    Parameters
+    ----------
+    subj : str
+        Subject ID.
+    param : str
+        Parameter to decode.
+    threshold_param : str | None (default: None)
+        Parameter to threshold.
+    threshold_val : float | None (default: None)
+        Threshold value.
+    processed_dir : str (default: params.PROCESSED_DIR)
+        Path to directory containing processed data.
+    decim_factor : int (default: params.DECIM_FACTOR)
+        Decimation factor.
+
+    Returns
+    -------
+    epochs : mne.Epochs
+        Epochs object containing EEG data.
+    times : ndarray
+        Time course.
+    beh_data : dict
+        Dictionary containing behavioral data.
+    processed_data : ndarray
+        Array containing processed data for decoding.
+    """
     # Load epoched EEG data
     epochs = mne.read_epochs(os.path.join(
         processed_dir, f'{subj}_eeg_data_epo.fif'), preload=True)
@@ -44,7 +71,26 @@ def load_processed_data(
 def average_processed_data_within_trial_blocks(
         epochs, times, beh_data, processed_data, n_blocks=params.N_BLOCKS):
     """Averaging processed data across trials within a block for each
-    location bin."""
+    location bin.
+
+    Parameters
+    ----------
+    epochs : mne.Epochs
+        Epochs object containing EEG data.
+    times : ndarray
+        Time course.
+    beh_data : dict
+        Dictionary containing behavioral data.
+    processed_data : ndarray
+        Array containing processed data for decoding.
+    n_blocks : int (default: params.N_BLOCKS)
+        Number of blocks to split trials into.
+
+    Returns
+    -------
+    processed_arr : ndarray
+        Array containing averaged processed data for decoding.
+    """
     # Extract relative variables from data
     pos_bins = beh_data['posBin']
     n_bins = len(set(pos_bins))
@@ -77,7 +123,26 @@ def average_processed_data_within_trial_blocks(
 
 def iem_one_timepoint(train_data, train_labels, test_data, test_labels):
     """Estimate channel response function (CRF) for one block of training and
-    testing data at one time point."""
+    testing data at one time point.
+
+    Parameters
+    ----------
+    train_data : ndarray
+        Array containing training data.
+    train_labels : ndarray
+        Array containing training labels.
+    test_data : ndarray
+        Array containing testing data.
+    test_labels : ndarray
+        Array containing testing labels.
+
+    Returns
+    -------
+    mean_channel_offset : ndarray
+        Array containing mean channel offset from fitted IEM.
+    ctf_slope : ndarray
+        Array containing CTF slope from fitted IEM.
+    """
     # Initialize IEM instance
     iem = IEM()
 
@@ -97,7 +162,29 @@ def iem_one_timepoint(train_data, train_labels, test_data, test_labels):
 def iem_one_block(
         train_data, train_labels, test_data, test_labels, time_axis=-1):
     """Estimate channel response function (CRF) for one block of training and
-    testing data across all time points."""
+    testing data across all time points.
+
+    Parameters
+    ----------
+    train_data : ndarray
+        Array containing training data.
+    train_labels : ndarray
+        Array containing training labels.
+    test_data : ndarray
+        Array containing testing data.
+    test_labels : ndarray
+        Array containing testing labels.
+    time_axis : int (default: -1)
+        Axis of data array containing time points.  Default is -1, which
+        corresponds to the last axis.
+
+    Returns
+    -------
+    mean_channel_offset : ndarray
+        Array containing mean channel offset from fitted IEM.
+    ctf_slope : ndarray
+        Array containing CTF slope from fitted IEM.
+    """
     # Organize data into lists of arrays for each time point
     data_one_tp = [list(np.rollaxis(
         data, time_axis)) for data in (train_data, test_data)]
@@ -116,7 +203,17 @@ def iem_one_block(
 
 
 def plot_channel_offset(channel_offset_arr, t_arr, save_fname=None):
-    """Plot channel offset across time."""
+    """Plot channel offset across time.
+
+    Parameters
+    ----------
+    channel_offset_arr : ndarray
+        Array containing channel offset.
+    t_arr : ndarray
+        Array containing time points.
+    save_fname : str (default: None)
+        File name to save figure to.  If None, figure will not be saved.
+    """
     # Initialize figure
     plt.figure()
 
@@ -143,7 +240,21 @@ def plot_channel_offset(channel_offset_arr, t_arr, save_fname=None):
 
 def plot_ctf_slope(ctf_slopes, t_arr, palette=None, save_fname=None):
     """Plot channel tuning function (CTF) across time for multiple
-    parameters."""
+    parameters.
+
+    Parameters
+    ----------
+    ctf_slopes : dict
+        Dictionary containing CTF slopes for each parameter. Keys are parameter
+        names and values are arrays containing CTF slopes.
+    t_arr : ndarray
+        Array containing time points.
+    palette : dict (default: None)
+        Dictionary containing colors for each parameter.  Keys are parameter
+        names and values are colors.  If None, default colors will be used.
+    save_fname : str (default: None)
+        File name to save figure to.  If None, figure will not be saved.
+    """
     # Make empty list for CTF slope DataFrames
     ctf_slopes_dfs = []
 
@@ -182,7 +293,37 @@ def train_and_test_one_subj(
         subj, param, threshold_param=None, threshold_val=None,
         n_blocks=params.N_BLOCKS, n_block_iters=params.N_BLOCK_ITERS,
         save_dir=params.IEM_OUTPUT_DIR, fig_dir=params.FIG_DIR):
-    """Reproduce one subject."""
+    """Reproduce one subject.
+
+    Parameters
+    ----------
+    subj : str
+        Subject ID.
+    param : str
+        Parameter to use for decoding.
+    threshold_param : str (default: None)
+        Parameter to use for thresholding.  If None, no thresholding will be
+        done.
+    threshold_val : float (default: None)
+        Value to use for thresholding.  If None, no thresholding will be done.
+    n_blocks : int (default: params.N_BLOCKS)
+        Number of blocks to use for cross-validation.
+    n_block_iters : int (default: params.N_BLOCK_ITERS)
+        Number of iterations to use for cross-validation.
+    save_dir : str (default: params.IEM_OUTPUT_DIR)
+        Directory to save output to.
+    fig_dir : str (default: params.FIG_DIR)
+        Directory to save figures to.
+
+    Returns
+    -------
+    mean_channel_offset : ndarray
+        Array containing mean channel offset across time.
+    ctf_slope : ndarray
+        Array containing CTF slope across time.
+    times : ndarray
+        Array containing time points.
+    """
     # Make directories specific to parameter
     save_dir = os.path.join(save_dir, param)
     fig_dir = os.path.join(fig_dir, param)
@@ -259,7 +400,31 @@ def train_and_test_one_subj(
 def train_and_test_all_subjs(
         param, threshold_param=None, threshold_val=None,
         processed_dir=params.PROCESSED_DIR, fig_dir=params.FIG_DIR):
-    """Reproduce all subjects."""
+    """Reproduce all subjects.
+
+    Parameters
+    ----------
+    param : str
+        Parameter to use for decoding.
+    threshold_param : str (default: None)
+        Parameter to use for thresholding.  If None, no thresholding will be
+        done.
+    threshold_val : float (default: None)
+        Value to use for thresholding.  If None, no thresholding will be done.
+    processed_dir : str (default: params.PROCESSED_DIR)
+        Directory containing processed data.
+    fig_dir : str (default: params.FIG_DIR)
+        Directory to save figures to.
+
+    Returns
+    -------
+    mean_channel_offset_all_subjs : ndarray
+        Array containing mean channel offset across subjects.
+    mean_ctf_slopes : ndarray
+        Array containing CTF slopes across subjects.
+    t_arr : ndarray
+        Array containing time points.
+    """
     # Get all subject IDs
     subjs = sorted([f.split('_')[0] for f in os.listdir(
         processed_dir) if param in f])

@@ -1,6 +1,6 @@
 """Decode spatial location from alpha oscillatory power and aperiodic exponent
 using same inverted encoding model (IEM) and EEG data as Foster and colleagues
-(https://pubmed.ncbi.nlm.nih.gov/26467522/"""
+(https://pubmed.ncbi.nlm.nih.gov/26467522/."""
 
 # Import neccesary modules
 import os
