@@ -17,7 +17,24 @@ import params
 
 
 def _index_nested_object(nested, indices, subject, return_num_subjects=False):
-    """Index nested Python object with tuple."""
+    """Index nested Python object with tuple.
+
+    Parameters:
+    -----------
+    nested : dict or list
+        Nested Python object to index.
+    indices : tuple
+        Tuple of indices to index nested object with.
+    subject : int
+        Subject number to index with.
+    return_num_subjects : bool (default: False)
+        Whether to return number of subjects in nested object.
+
+    Returns:
+    --------
+    nested : dict or list
+        Nested Python object indexed with given indices.
+    """
     # If given indices are not in fact indices, return them as the desired value
     if not isinstance(indices, tuple):
         return indices
@@ -52,7 +69,21 @@ def split_data_by_subject(
         experiment, experiment_vars=frozendict(params.EXPERIMENT_VARS),
         num_subjects=frozendict(params.NUM_SUBJECTS),
         download_dir=params.DOWNLOAD_DIR, processed_dir=params.PROCESSED_DIR):
-    """Split data for experiments into individual subjects."""
+    """Split data for experiments into individual subjects.
+
+    Parameters:
+    -----------
+    experiment : str
+        Experiment to split data for.
+    experiment_vars : dict (default: params.EXPERIMENT_VARS)
+        Dictionary of experiment variables.
+    num_subjects : dict (default: params.NUM_SUBJECTS)
+        Dictionary of number of subjects for each experiment.
+    download_dir : str (default: params.DOWNLOAD_DIR)
+        Directory containing downloaded data.
+    processed_dir : str (default: params.PROCESSED_DIR)
+        Directory to save processed data to.
+    """
     # Make directory if necessary
     os.makedirs(processed_dir, exist_ok=True)
 
@@ -136,16 +167,26 @@ def split_data_by_subject(
         if not os.path.exists(beh_fname):
             beh_data = pos_bin.flat[~bad_trials]
             np.save(beh_fname, beh_data)
-    return
 
 
 def compute_total_power(epochs, save_fname, alpha_band=params.ALPHA_BAND):
     """Following Foster et al. (2015), filter data in desired alpha band, apply
     Hilbert transform, and compute total power from analytic signal.
 
-    Then, use multitaper to estimate PSD with sliding window, spectral
-    parameterization to fit periodic and aperiodic components, and then isolate
-    aperiodic exponent and alpha oscillatory power."""
+    Parameters:
+    -----------
+    epochs : mne.Epochs
+        Epochs object to compute total power for.
+    save_fname : str
+        Filename to save total power to.
+    alpha_band : tuple (default: params.ALPHA_BAND)
+        Alpha band to filter data in.
+
+    Returns:
+    --------
+    total_power : mne.Epochs
+        Epochs object containing total power data.
+    """
     # Load total power data if already computed
     if os.path.exists(save_fname):
         return mne.read_epochs(save_fname)
@@ -169,7 +210,32 @@ def compute_tfr(epochs, save_fname, fmin=params.FMIN, fmax=params.FMAX,
         n_freqs=params.N_FREQS, time_window_len=params.TIME_WINDOW_LEN,
         decim_factor=params.DECIM_FACTOR, n_cpus=params.N_CPUS):
     """Compute time-frequency representation (i.e. spectrogram) using
-    multitapers across epochs and channels."""
+    multitapers across epochs and channels.
+
+    Parameters:
+    -----------
+    epochs : mne.Epochs
+        Epochs object to compute spectrogram for.
+    save_fname : str
+        Filename to save spectrogram to.
+    fmin : float (default: params.FMIN)
+        Minimum frequency to compute spectrogram for.
+    fmax : float (default: params.FMAX)
+        Maximum frequency to compute spectrogram for.
+    n_freqs : int (default: params.N_FREQS)
+        Number of frequencies to compute spectrogram for.
+    time_window_len : float (default: params.TIME_WINDOW_LEN)
+        Length of time window to use for each frequency.
+    decim_factor : int (default: params.DECIM_FACTOR)
+        Factor to downsample data by before computing spectrogram.
+    n_cpus : int (default: params.N_CPUS)
+        Number of CPUs to use for parallel processing.
+
+    Returns:
+    --------
+    tfr_mt : mne.time_frequency.tfr_array.TFRArray
+        Spectrogram data.
+    """
     # Load file if already computed
     if os.path.exists(save_fname):
         tfr_mt = mne.time_frequency.read_tfrs(save_fname)
@@ -197,7 +263,35 @@ def run_sparam_one_trial(
         peak_width_lims=params.PEAK_WIDTH_LIMS, fmin=params.FMIN,
         fmax=params.FMAX, freq_band=params.ALPHA_BAND, verbose=True):
     """Parameterize the neural power spectra for each time point in the
-    spectrogram for one trial."""
+    spectrogram for one trial.
+
+    Parameters:
+    -----------
+    tfr_arr : np.ndarray
+        Array of time-frequency representations (i.e. spectrograms) for each
+        trial.
+    trial_num : int
+        Trial number to run spectral parameterization on.
+    freqs : np.ndarray
+        Array of frequencies corresponding to the spectrogram.
+    n_peaks : int (default: params.N_PEAKS)
+        Maximum number of peaks to fit in the model.
+    peak_width_lims : tuple (default: params.PEAK_WIDTH_LIMS)
+        Limits on peak width to fit in the model.
+    fmin : float (default: params.FMIN)
+        Minimum frequency to fit in the model.
+    fmax : float (default: params.FMAX)
+        Maximum frequency to fit in the model.
+    freq_band : tuple (default: params.ALPHA_BAND)
+        Frequency band to extract peak parameters from.
+    verbose : bool (default: True)
+        Whether to print progress.
+
+    Returns:
+    --------
+    sparam_df_one_trial : pd.DataFrame
+        Dataframe containing spectral parameterization results for one trial.
+    """
     # Start timer
     start = time.time()
     print(f'Started spectral parameterization of Trial #{trial_num}')
@@ -243,8 +337,23 @@ def run_sparam_one_trial(
 
 def run_sparam_all_trials(tfr, save_fname, n_cpus=params.N_CPUS):
     """Parameterize the neural power spectra for each time point in the
-    spectrogram. Spectrogram (tfr) should have shape of (n_trials, n_channels,
-    n_freqs, n_timepoints)."""
+    spectrogram.
+
+    Parameters:
+    -----------
+    tfr : mne.time_frequency.tfr_array.TFRArray
+        Time-frequency representation (i.e. spectrogram) for all trials. Shape
+        should be (n_trials, n_channels, n_freqs, n_timepoints).
+    save_fname : str
+        Filename to save spectral parameterization results to.
+    n_cpus : int (default: params.N_CPUS)
+        Number of CPUs to use for parallelization.
+
+    Returns:
+    --------
+    sparam_df_all_trials : pd.DataFrame
+        Dataframe containing spectral parameterization results for all trials.
+    """
     # Initialize big DataFrame
     sparam_df_all_trials = pd.DataFrame([])
     trials_computed = set([])
@@ -288,7 +397,25 @@ def run_sparam_all_trials(tfr, save_fname, n_cpus=params.N_CPUS):
 
 def convert_sparam_df_to_mne(tfr_mt, sparam_df, save_fname):
     """Convert spectral parameterization DataFrame to series of MNE epochs, one
-    for each relevant spectral parameterization model parameter."""
+    for each relevant spectral parameterization model parameter.
+
+    Parameters:
+    -----------
+    tfr_mt : mne.time_frequency.tfr_array.TFRArray
+        Time-frequency representation (i.e. spectrogram) for all trials. Shape
+        should be (n_trials, n_channels, n_freqs, n_timepoints).
+    sparam_df : pd.DataFrame
+        Dataframe containing spectral parameterization results for all trials.
+    save_fname : str
+        Filename to save spectral parameterization results to.  This is used to
+        determine the filename for the MNE epochs.
+
+    Returns:
+    --------
+    epochs : mne.Epochs
+        Epochs object containing spectral parameterization results for all
+        trials.
+    """
     # Reorganize spectral parameterization DataFrame
     sparam_df = sparam_df.set_index(['trial', 'channel', 'timepoint'])
     if len(sparam_df) != np.prod(sparam_df.index.levshape):
@@ -316,7 +443,6 @@ def convert_sparam_df_to_mne(tfr_mt, sparam_df, save_fname):
 
         # Save EpochArray
         epochs_arr.save(col_epochs_fname)
-    return
 
 
 def process_one_subject(
@@ -332,7 +458,22 @@ def process_one_subject(
 
     Preprocessing #2: Use multitaper to estimate PSD with sliding window,
     spectral parameterization to fit periodic and aperiodic components, and then
-    isolate aperiodic exponent and alpha oscillatory power."""
+    isolate aperiodic exponent and alpha oscillatory power.
+
+    Parameters:
+    -----------
+    subject_fname : str
+        Filename of subject's EEG data.
+    processed_dir : str (default: params.PROCESSED_DIR)
+        Directory to save processed data to.
+    total_power_dir : str (default: params.TOTAL_POWER_DIR)
+        Directory to save total power data to.
+    tfr_dir : str (default: params.TFR_DIR)
+        Directory to save time-frequency representation (i.e. spectrogram) data
+        to.
+    sparam_dir : str (default: params.SPARAM_DIR)
+        Directory to save spectral parameterization data to.
+    """
     # Extract experiment and subject from filename
     experiment, subject = subject_fname.split('_')[:2]
     subject = int(subject)
@@ -364,7 +505,15 @@ def process_one_subject(
 def process_all_subjects(
         download_dir=params.DOWNLOAD_DIR, processed_dir=params.PROCESSED_DIR):
     """Load EEG and behavioral data and then perform preprocessing for all
-    subjects."""
+    subjects.
+
+    Parameters:
+    -----------
+    download_dir : str (default: params.DOWNLOAD_DIR)
+        Directory containing downloaded data.
+    processed_dir : str (default: params.PROCESSED_DIR)
+        Directory to save processed data to.
+    """
     # Split data by subjects if necessary
     experiments = set([f.split('.')[-2].split('_')[-1] for f in os.listdir(
         download_dir) if '.mat' in f])
