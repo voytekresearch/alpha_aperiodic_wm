@@ -11,13 +11,89 @@ import params
 
 
 class IEM():
-    """IEM model that can be trained to estimate labels from data."""
+    """IEM model that can be trained to estimate labels from data.
+
+    Attributes
+    ----------
+    n_channels : int
+        Number of channels to use in IEM.
+    basis_func : function
+        Basis function to use in IEM.
+    feat_space_edges : tuple
+        Tuple of (min, max) values for feature space.
+    feature_name : str
+        Name of feature to use in IEM.
+    feat_space_range : int
+        Number of values in feature space.
+    theta : array
+        Array of values in feature space.
+    channel_centers : array
+        Array of channel centers.
+    channel_width : float
+        Width of each channel.
+    basis_set : array
+        Array of basis functions for each channel.
+    design_matrix : array
+        Design matrix to serve as teacher in training IEM.
+    weights : array
+        Weights for IEM that predict labels from data.
+    estimated_ctfs : array
+        Estimated channel tuning functions (CTFs) from testing data.
+    mean_channel_offset : array
+        Mean channel offset from estimated channel tuning functions (CTFs).
+    ctf_slope : array
+        Slope of the channel tuning functions (CTF).
+
+    Methods
+    -------
+    _gen_design_matrix(labels)
+        Generate design matrix to serve as teacher in training IEM.
+    fit_iem(train_data)
+        Use training data to estimate weights for IEM that predict labels from
+        data.
+    train_model(train_data, train_labels)
+        Train IEM model to estimate training labels from training data.
+    estimate_ctf(test_data, test_labels)
+        Estimate channel tuning functions (CTFs) from testing data.
+    compute_mean_channel_offset()
+        Compute mean channel offset from estimated channel tuning functions
+        (CTFs).
+    _avg_arr_across_equidistant_channels(arr, idx=0, dim=0)
+        Take mean across channels that are equidistant from the tuned channel
+        in channel tuning functions (CTFs).
+    compute_ctf_slope()
+        Compute slope of the channel tuning functions (CTF).
+    plot_ctf()
+        Plot channel tuning functions (CTF).
+    plot_ctf_slope()
+        Plot slope of the channel tuning functions (CTF).
+    plot_mean_channel_offset()
+        Plot mean channel offset from estimated channel tuning functions (CTF).
+    plot_mean_channel_offset_slope()
+        Plot slope of mean channel offset from estimated channel tuning
+        functions (CTF).
+    plot_mean_channel_offset_vs_ctf_slope()
+        Plot mean channel offset vs. slope of the channel tuning functions
+        (CTF).
+    """
     def __init__(
             self, n_channels=params.IEM_N_CHANNELS,
             basis_func=params.IEM_BASIS_FUNC,
             feat_space_edges=params.IEM_FEAT_SPACE_EDGES,
             feature_name=params.FEATURE_NAME):
-        """Initialize IEM with all required attributes."""
+        """Initialize IEM with all required attributes.
+
+        Parameters
+        ----------
+        n_channels : int (default: params.IEM_N_CHANNELS)
+            Number of channels to use in IEM.
+        basis_func : function (default: params.IEM_BASIS_FUNC)
+            Basis function to use in IEM.
+        feat_space_edges : tuple (default: params.IEM_FEAT_SPACE_EDGES)
+            Tuple of (min, max) values for feature space.
+        feature_name : str (default: params.FEATURE_NAME)
+            Name of feature to use in IEM.
+        """
         self.n_channels = n_channels
         self.basis_func = basis_func
         self.feat_space_edges = feat_space_edges
@@ -40,22 +116,50 @@ class IEM():
         self.ctf_slope = None
 
     def _gen_design_matrix(self, labels):
-        """Generate design matrix to serve as teacher in training IEM."""
+        """Generate design matrix to serve as teacher in training IEM.
+
+        Parameters
+        ----------
+        labels : array
+            Array of labels to use in design matrix.
+        """
         self.design_matrix = self.basis_set @ np.eye(len(self.theta))[labels].T
 
     def fit_iem(self, train_data):
         """Use training data to estimate weights for IEM that predict labels
-        from data."""
+        from data.
+
+        Parameters
+        ----------
+        train_data : array
+            Array of training data to use in IEM.
+        """
         inv = np.linalg.inv(self.design_matrix @ self.design_matrix.T)
         self.weights = train_data @ self.design_matrix.T @ inv
 
     def train_model(self, train_data, train_labels):
-        """Train IEM model to estimate training labels from training data."""
+        """Train IEM model to estimate training labels from training data.
+
+        Parameters
+        ----------
+        train_data : array
+            Array of training data to use in IEM.
+        train_labels : array
+            Array of training labels to use in IEM.
+        """
         self._gen_design_matrix(train_labels)
         self.fit_iem(train_data)
 
     def estimate_ctf(self, test_data, test_labels):
-        """Estimate channel tuning functions (CTFs) from testing data."""
+        """Estimate channel tuning functions (CTFs) from testing data.
+
+        Parameters
+        ----------
+        test_data : array
+            Array of testing data to use in IEM.
+        test_labels : array
+            Array of testing labels to use in IEM.
+        """
         inv = np.linalg.inv(self.weights.T @ self.weights)
         estimated_crfs = inv @ self.weights.T @ test_data
         test_labels_idx = rankdata(test_labels, method='dense') - 1
@@ -65,7 +169,8 @@ class IEM():
 
     def compute_mean_channel_offset(self):
         """Compute mean channel offset from estimated channel tuning functions
-        (CTFs), which must already be computed."""
+        (CTFs), which must already be computed.
+        """
         assert self.estimated_ctfs is not None
         channel_offsets = self.basis_set.T @ self.estimated_ctfs
         self.mean_channel_offset = np.roll(np.mean(
@@ -74,7 +179,8 @@ class IEM():
     @staticmethod
     def _avg_arr_across_equidistant_channels(arr, idx=0, dim=0):
         """Take mean across channels that are equidistant from the tuned channel
-        in channel tuning functions (CTFs), which must already be computed."""
+        in channel tuning functions (CTFs), which must already be computed.
+        """
         arr = np.moveaxis(arr, dim, 0)
         arr = np.roll(arr, -idx, axis=0)
         same_dist_to_tuned = np.array(list(zip(arr.take(indices=range(len(
