@@ -75,6 +75,7 @@ EXPERIMENT_VARS = {
 
 # Computing parameters
 N_CPUS = 6
+NICENESS = 20
 
 # Experimental parameters
 EXPERIMENT_NUM = 1

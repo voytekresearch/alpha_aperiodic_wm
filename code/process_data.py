@@ -503,17 +503,23 @@ def process_one_subject(
 
 
 def process_all_subjects(
-        download_dir=params.DOWNLOAD_DIR, processed_dir=params.PROCESSED_DIR):
+        niceness=params.NICENESS, download_dir=params.DOWNLOAD_DIR,
+        processed_dir=params.PROCESSED_DIR):
     """Load EEG and behavioral data and then perform preprocessing for all
     subjects.
 
     Parameters:
     -----------
+    niceness : int (default: params.NICENESS)
+        Niceness value to set for process.
     download_dir : str (default: params.DOWNLOAD_DIR)
         Directory containing downloaded data.
     processed_dir : str (default: params.PROCESSED_DIR)
         Directory to save processed data to.
     """
+    # Set niceness
+    os.nice(niceness)
+
     # Split data by subjects if necessary
     experiments = set([f.split('.')[-2].split('_')[-1] for f in os.listdir(
         download_dir) if '.mat' in f])
