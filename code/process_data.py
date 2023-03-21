@@ -486,14 +486,17 @@ def process_one_subject(
     epochs = mne.read_epochs(epochs_fname)
 
     # Calculate total power
+    os.makedirs(total_power_dir, exist_ok=True)
     total_power_fname = f'{total_power_dir}/{subject}_total_power_epo.fif'
     compute_total_power(epochs, total_power_fname)
 
     # Compute spectrogram
+    os.makedirs(tfr_dir, exist_ok=True)
     tfr_fname = f'{tfr_dir}/{subject}-tfr.h5'
     tfr_mt = compute_tfr(epochs, tfr_fname)
 
     # Parameterize spectrogram
+    os.makedirs(sparam_dir, exist_ok=True)
     sparam_df_fname = f'{sparam_dir}/{subject}_sparam.csv'
     sparam_df = run_sparam_all_trials(tfr_mt, sparam_df_fname)
 
