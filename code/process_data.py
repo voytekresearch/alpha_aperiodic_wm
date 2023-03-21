@@ -298,7 +298,7 @@ def run_sparam_one_trial(
 
     # Initialize FOOOFGroup
     fooof_grp = FOOOFGroup(
-        max_n_peaks=n_peaks, peak_width_limits=peak_width_lims)
+        max_n_peaks=n_peaks, peak_width_limits=peak_width_lims, verbose=False)
 
     # Fit spectral parameterization model
     fooof_grp = combine_fooofs(fit_fooof_3d(
@@ -487,21 +487,22 @@ def process_one_subject(
 
     # Calculate total power
     os.makedirs(total_power_dir, exist_ok=True)
-    total_power_fname = f'{total_power_dir}/{subject}_total_power_epo.fif'
+    total_power_fname = (
+        f'{total_power_dir}/{experiment}_{subject}_total_power_epo.fif')
     compute_total_power(epochs, total_power_fname)
 
     # Compute spectrogram
     os.makedirs(tfr_dir, exist_ok=True)
-    tfr_fname = f'{tfr_dir}/{subject}-tfr.h5'
+    tfr_fname = f'{tfr_dir}/{experiment}_{subject}-tfr.h5'
     tfr_mt = compute_tfr(epochs, tfr_fname)
 
     # Parameterize spectrogram
     os.makedirs(sparam_dir, exist_ok=True)
-    sparam_df_fname = f'{sparam_dir}/{subject}_sparam.csv'
+    sparam_df_fname = f'{sparam_dir}/{experiment}_{subject}_sparam.csv'
     sparam_df = run_sparam_all_trials(tfr_mt, sparam_df_fname)
 
     # Extract spectral parameters from model and convert to mne
-    sparam_epo_fname = f'{sparam_dir}/{subject}_epo.fif'
+    sparam_epo_fname = f'{sparam_dir}/{experiment}_{subject}_epo.fif'
     convert_sparam_df_to_mne(tfr_mt, sparam_df, sparam_epo_fname)
 
 
