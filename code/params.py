@@ -74,8 +74,8 @@ EXPERIMENT_VARS = {
             'art_post_time': ('data', 'eeg', 'arfPostTime')}}
 
 # Computing parameters
-N_CPUS = 12
-NICENESS = 20
+N_CPUS = 24
+NICENESS = 19
 
 # Experimental parameters
 EXPERIMENT_NUM = 1
