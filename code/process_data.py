@@ -294,7 +294,7 @@ def run_sparam_one_trial(
     """
     # Start timer
     start = time.time()
-    print(f'Started spectral parameterization of Trial #{trial_num}')
+    print(f'Started spectral parameterization of trial #{trial_num}')
 
     # Initialize FOOOFGroup
     fooof_grp = FOOOFGroup(
@@ -330,12 +330,12 @@ def run_sparam_one_trial(
 
     # Print progress
     if verbose:
-        print(f'Spectral parameterization for Trial #{trial_num} in '
+        print(f'Finished spectral parameterization for trial #{trial_num} in '
               f'{time.time() - start} seconds\n')
-    return sparam_df_one_trial
+    return trial_num, sparam_df_one_trial
 
 
-def run_sparam_all_trials(tfr, save_fname, n_cpus=params.N_CPUS):
+def run_sparam_all_trials(tfr, save_dir, n_cpus=params.N_CPUS):
     """Parameterize the neural power spectra for each time point in the
     spectrogram.
 
@@ -344,8 +344,8 @@ def run_sparam_all_trials(tfr, save_fname, n_cpus=params.N_CPUS):
     tfr : mne.time_frequency.tfr_array.TFRArray
         Time-frequency representation (i.e. spectrogram) for all trials. Shape
         should be (n_trials, n_channels, n_freqs, n_timepoints).
-    save_fname : str
-        Filename to save spectral parameterization results to.
+    save_dir : str
+        Directory to save spectral parameterization results.
     n_cpus : int (default: params.N_CPUS)
         Number of CPUs to use for parallelization.
 
@@ -354,16 +354,9 @@ def run_sparam_all_trials(tfr, save_fname, n_cpus=params.N_CPUS):
     sparam_df_all_trials : pd.DataFrame
         Dataframe containing spectral parameterization results for all trials.
     """
-    # Initialize big DataFrame
-    sparam_df_all_trials = pd.DataFrame([])
-    trials_computed = set([])
-
-    # Load DataFrame if already generated
-    if os.path.exists(save_fname):
-        sparam_df_all_trials = pd.read_csv(save_fname, index_col=False)
-
-        # Determine which trials have already been computed
-        trials_computed = set(sparam_df_all_trials['trial'])
+    # Determine which trials have already been computed
+    trials_computed = [int(f.split('.')[0].split('l')[-1]) for f in os.listdir(
+        save_dir)]
 
     # Make copy of spectrogram
     tfr = tfr.copy()
@@ -372,26 +365,39 @@ def run_sparam_all_trials(tfr, save_fname, n_cpus=params.N_CPUS):
     n_trials = tfr.data.shape[0]
     tfr.data = np.swapaxes(tfr.data, 2, 3)
 
+    # Print remaining trials to compute
+    trials_to_process = sorted(list(set(range(n_trials)) - set(
+        trials_computed)))
+    print(f'Already processed: {len(trials_computed)}\n'
+          f'Still to process: {len(trials_to_process)}\n')
+
     # Iterate through each trial of data
     ray.init(num_cpus=n_cpus)
     tfr_arr_id = ray.put(tfr.data)
 
     # Fit spectral parameterization model for one trial
     result_ids = [run_sparam_one_trial.remote(
-        tfr_arr_id, trial_num, tfr.freqs) for trial_num in range(n_trials) if
-        trial_num not in trials_computed]
+        tfr_arr_id, trial_num, tfr.freqs) for trial_num in trials_to_process]
 
-    # Concatenate trial model parameters and save as processed
+    # Save trial data as processed
     while result_ids:
         done_id, result_ids = ray.wait(result_ids)
 
-        # Add fit model parameters to big DataFrame
-        sparam_df_all_trials = pd.concat(
-            (sparam_df_all_trials, ray.get(done_id[0])), ignore_index=True)
+        # Save trial DataFrame
+        trial_num, sparam_df_one_trial = ray.get(done_id[0])
+        save_fname = f'{save_dir}/sparam_trial{trial_num}.csv'
+        sparam_df_one_trial.to_csv(save_fname, index=False)
 
-        # Save DataFrame
-        sparam_df_all_trials.to_csv(save_fname, index=False)
+    # Shut down ray
     ray.shutdown()
+
+    # Concatenate all trial DataFrames
+    sparam_df_all_trials = pd.DataFrame([])
+    for fname in os.listdir(save_dir):
+        sparam_df_one_trial = pd.read_csv(f'{save_dir}/{fname}')
+        sparam_df_all_trials = pd.concat(
+            [sparam_df_all_trials, sparam_df_one_trial], ignore_index=True)
+        print(sparam_df_all_trials.shape)
     return sparam_df_all_trials
 
 
@@ -497,9 +503,11 @@ def process_one_subject(
     tfr_mt = compute_tfr(epochs, tfr_fname)
 
     # Parameterize spectrogram
-    os.makedirs(sparam_dir, exist_ok=True)
-    sparam_df_fname = f'{sparam_dir}/{experiment}_{subject}_sparam.csv'
-    sparam_df = run_sparam_all_trials(tfr_mt, sparam_df_fname)
+    subj_sparam_dir = f'{sparam_dir}/{experiment}_{subject}'
+    os.makedirs(subj_sparam_dir, exist_ok=True)
+    print(f'\nStarting spectral parameterization for Subject '
+          f'{experiment}_{subject}')
+    sparam_df = run_sparam_all_trials(tfr_mt, subj_sparam_dir)
 
     # Extract spectral parameters from model and convert to mne
     sparam_epo_fname = f'{sparam_dir}/{experiment}_{subject}_epo.fif'
