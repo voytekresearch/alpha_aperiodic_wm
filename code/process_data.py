@@ -4,6 +4,7 @@
 import os
 import os.path
 import time
+import warnings
 import mne
 import ray
 import numpy as np
@@ -34,7 +35,7 @@ def compute_total_power(epochs, save_fname, alpha_band=params.ALPHA_BAND):
     """
     # Load total power data if already computed
     if os.path.exists(save_fname):
-        return mne.read_epochs(save_fname)
+        return
 
     # Band-pass filter in alpha band
     alpha_band = epochs.copy().filter(*alpha_band)
@@ -48,43 +49,50 @@ def compute_total_power(epochs, save_fname, alpha_band=params.ALPHA_BAND):
 
     # Save data to avoid re-processing
     total_power.save(save_fname)
-    return total_power
 
 
-def compute_tfr(epochs, save_fname, fmin=params.FMIN, fmax=params.FMAX,
-        n_freqs=params.N_FREQS, time_window_len=params.TIME_WINDOW_LEN,
-        decim_factor=params.DECIM_FACTOR, n_cpus=params.N_CPUS):
-    """Compute time-frequency representation (i.e. spectrogram) using
-    multitapers across epochs and channels.
+@ray.remote
+def run_decomp_and_sparam_one_trial(
+        epochs, trial_num, fmin=params.FMIN, fmax=params.FMAX,
+        n_freqs=params.N_FREQS,time_window_len=params.TIME_WINDOW_LEN,
+        decim_factor=params.DECIM_FACTOR, n_peaks=params.N_PEAKS,
+        peak_width_lims=params.PEAK_WIDTH_LIMS, freq_band=params.ALPHA_BAND,
+        verbose=True):
+    """
+    For one trial of data, run spectral decomposition and spectral
+    parameterization.
 
     Parameters:
     -----------
     epochs : mne.Epochs
-        Epochs object to compute spectrogram for.
-    save_fname : str
-        Filename to save spectrogram to.
+        Epochs object to run spectral decomposition and spectral
+        parameterization.
+    trial_num : int
+        Trial number to run spectral decomposition and spectral
+        parameterization for.
     fmin : float (default: params.FMIN)
-        Minimum frequency to compute spectrogram for.
+        Minimum frequency to use for spectral decomposition.
     fmax : float (default: params.FMAX)
-        Maximum frequency to compute spectrogram for.
+        Maximum frequency to use for spectral decomposition.
     n_freqs : int (default: params.N_FREQS)
-        Number of frequencies to compute spectrogram for.
+        Number of frequencies to use for spectral decomposition.
     time_window_len : float (default: params.TIME_WINDOW_LEN)
-        Length of time window to use for each frequency.
+        Length of time window to use for spectral decomposition.
     decim_factor : int (default: params.DECIM_FACTOR)
-        Factor to downsample data by before computing spectrogram.
-    n_cpus : int (default: params.N_CPUS)
-        Number of CPUs to use for parallel processing.
-
-    Returns:
-    --------
-    tfr_mt : mne.time_frequency.tfr_array.TFRArray
-        Spectrogram data.
+        Decimation factor to use for spectral decomposition.
+    n_peaks : int (default: params.N_PEAKS)
+        Maximum number of peaks to use for spectral parameterization.
+    peak_width_lims : tuple (default: params.PEAK_WIDTH_LIMS)
+        Peak width limits to use for spectral parameterization.
+    freq_band : tuple (default: params.ALPHA_BAND)
+        Frequency band to extract peaks from spectral parameterization.
+    verbose : bool (default: True)
+        Whether to print runtime information.
     """
-    # Load file if already computed
-    if os.path.exists(save_fname):
-        tfr_mt = mne.time_frequency.read_tfrs(save_fname)
-        return tfr_mt[0]
+    # Start timer for spectral decomposition
+    start = time.time()
+    if verbose:
+        print(f'Started spectral decomposition of trial #{trial_num}')
 
     # Make frequencies log-spaced
     freqs = np.linspace(fmin, fmax, n_freqs)
@@ -92,54 +100,28 @@ def compute_tfr(epochs, save_fname, fmin=params.FMIN, fmax=params.FMAX,
     # Make time window length consistent across frequencies
     n_cycles = freqs * time_window_len
 
+    # Get current trial of data
+    trial = epochs.copy().drop(
+        [i for i in range(epochs.get_data().shape[0]) if i != trial_num],
+        verbose=False)
+
     # Use multitapers to estimate spectrogram
-    tfr_mt = mne.time_frequency.tfr_multitaper(
-        epochs.copy(), freqs, n_cycles, n_jobs=n_cpus, return_itc=False,
-        picks='eeg', average=False, decim=decim_factor)
+    trial_tfr = mne.time_frequency.tfr_multitaper(
+        trial, freqs, n_cycles, return_itc=False, picks='eeg', average=False,
+        decim=decim_factor, verbose=False)
 
-    # Save spectrogram
-    tfr_mt.save(save_fname)
-    return tfr_mt
+    # Reshape spectrogram to be (n_channels, n_timepts, n_freqs)
+    tfr_arr = np.squeeze(np.swapaxes(trial_tfr.data, 2, 3))
 
+    # Print runtime for spectral decomposition
+    if verbose:
+        print(f'Finished spectral decomposition for trial #{trial_num} in '
+              f'{time.time() - start:.1f} seconds')
 
-@ray.remote
-def run_sparam_one_trial(
-        tfr_arr, trial_num, freqs, n_peaks=params.N_PEAKS,
-        peak_width_lims=params.PEAK_WIDTH_LIMS, fmin=params.FMIN,
-        fmax=params.FMAX, freq_band=params.ALPHA_BAND, verbose=True):
-    """Parameterize the neural power spectra for each time point in the
-    spectrogram for one trial.
-
-    Parameters:
-    -----------
-    tfr_arr : np.ndarray
-        Array of time-frequency representations (i.e. spectrograms) for each
-        trial.
-    trial_num : int
-        Trial number to run spectral parameterization on.
-    freqs : np.ndarray
-        Array of frequencies corresponding to the spectrogram.
-    n_peaks : int (default: params.N_PEAKS)
-        Maximum number of peaks to fit in the model.
-    peak_width_lims : tuple (default: params.PEAK_WIDTH_LIMS)
-        Limits on peak width to fit in the model.
-    fmin : float (default: params.FMIN)
-        Minimum frequency to fit in the model.
-    fmax : float (default: params.FMAX)
-        Maximum frequency to fit in the model.
-    freq_band : tuple (default: params.ALPHA_BAND)
-        Frequency band to extract peak parameters from.
-    verbose : bool (default: True)
-        Whether to print progress.
-
-    Returns:
-    --------
-    sparam_df_one_trial : pd.DataFrame
-        Dataframe containing spectral parameterization results for one trial.
-    """
-    # Start timer
+    # Start timer for spectral parameterization
     start = time.time()
-    print(f'Started spectral parameterization of trial #{trial_num}')
+    if verbose:
+        print(f'Started spectral parameterization of trial #{trial_num}')
 
     # Initialize FOOOFGroup
     fooof_grp = FOOOFGroup(
@@ -147,15 +129,18 @@ def run_sparam_one_trial(
 
     # Fit spectral parameterization model
     fooof_grp = combine_fooofs(fit_fooof_3d(
-        fooof_grp, freqs, tfr_arr[trial_num, :, :, :], freq_range=(fmin, fmax)))
+        fooof_grp, freqs, tfr_arr, freq_range=(fmin, fmax)))
 
     # Extract aperiodic and model fit parameters from model
-    aperiodic_params = fooof_grp.get_params('aperiodic_params')
-    r_squared = fooof_grp.get_params('r_squared')
-    error = fooof_grp.get_params('error')
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        aperiodic_params = fooof_grp.get_params('aperiodic_params')
+        r_squared = fooof_grp.get_params('r_squared')
+        error = fooof_grp.get_params('error')
 
-    # Select only peak parameters with peak frequency in desired frequency band
-    peak_params = get_band_peak_fg(fooof_grp, freq_band)
+        # Select only peak parameters with peak frequency in desired frequency
+        # band
+        peak_params = get_band_peak_fg(fooof_grp, freq_band)
 
     # Put all parameters together
     model_params = np.hstack((
@@ -163,7 +148,7 @@ def run_sparam_one_trial(
         error[:, np.newaxis]))
 
     # Create DataFrame for trial
-    _, n_channels, n_timepts, _ = tfr_arr.shape
+    n_channels, n_timepts, _ = tfr_arr.shape
     index_shape = (1, n_channels, n_timepts)
     index_names = ['trial', 'channel', 'timepoint']
     index = pd.MultiIndex.from_product([
@@ -173,42 +158,35 @@ def run_sparam_one_trial(
         model_params, columns=column_names, index=index).reset_index()
     sparam_df_one_trial.loc[:, 'trial'] = trial_num
 
-    # Print progress
+    # Print runtime for spectral parameterization
     if verbose:
         print(f'Finished spectral parameterization for trial #{trial_num} in '
-              f'{time.time() - start} seconds\n')
+              f'{time.time() - start:.1f} seconds')
     return trial_num, sparam_df_one_trial
 
 
-def run_sparam_all_trials(tfr, save_dir, n_cpus=params.N_CPUS):
-    """Parameterize the neural power spectra for each time point in the
-    spectrogram.
+def run_decomp_and_sparam_all_trials(epochs, save_dir):
+    """For each trial of data, run spectral decomposition and spectral
+    parameterization using ray for parallelization.
 
     Parameters:
     -----------
-    tfr : mne.time_frequency.tfr_array.TFRArray
-        Time-frequency representation (i.e. spectrogram) for all trials. Shape
-        should be (n_trials, n_channels, n_freqs, n_timepoints).
+    epochs : mne.Epochs
+        Epochs object containing data to be processed.
     save_dir : str
-        Directory to save spectral parameterization results.
-    n_cpus : int (default: params.N_CPUS)
-        Number of CPUs to use for parallelization.
+        Directory to save results to.
 
     Returns:
     --------
-    sparam_df_all_trials : pd.DataFrame
-        Dataframe containing spectral parameterization results for all trials.
+    sparam_df : pd.DataFrame
+        DataFrame containing spectral parameterization results for all trials.
     """
     # Determine which trials have already been computed
     trials_computed = [int(f.split('.')[0].split('l')[-1]) for f in os.listdir(
         save_dir)]
 
-    # Make copy of spectrogram
-    tfr = tfr.copy()
-
-    # Reshape spectrogram
-    n_trials = tfr.data.shape[0]
-    tfr.data = np.swapaxes(tfr.data, 2, 3)
+    # Determine number of trials
+    n_trials = epochs.get_data().shape[0]
 
     # Print remaining trials to compute
     trials_to_process = sorted(list(set(range(n_trials)) - set(
@@ -217,12 +195,12 @@ def run_sparam_all_trials(tfr, save_dir, n_cpus=params.N_CPUS):
           f'Still to process: {len(trials_to_process)}\n')
 
     # Iterate through each trial of data
-    ray.init(num_cpus=n_cpus)
-    tfr_arr_id = ray.put(tfr.data)
+    ray.init(address=os.environ["ip_head"])
+    epochs_id = ray.put(epochs)
 
     # Fit spectral parameterization model for one trial
-    result_ids = [run_sparam_one_trial.remote(
-        tfr_arr_id, trial_num, tfr.freqs) for trial_num in trials_to_process]
+    result_ids = [run_decomp_and_sparam_one_trial.remote(
+        epochs_id, trial_num) for trial_num in trials_to_process]
 
     # Save trial data as processed
     while result_ids:
@@ -246,26 +224,19 @@ def run_sparam_all_trials(tfr, save_dir, n_cpus=params.N_CPUS):
     return sparam_df_all_trials
 
 
-def convert_sparam_df_to_mne(tfr_mt, sparam_df, save_fname):
+def convert_sparam_df_to_mne(sparam_df, info, save_fname):
     """Convert spectral parameterization DataFrame to series of MNE epochs, one
     for each relevant spectral parameterization model parameter.
 
     Parameters:
     -----------
-    tfr_mt : mne.time_frequency.tfr_array.TFRArray
-        Time-frequency representation (i.e. spectrogram) for all trials. Shape
-        should be (n_trials, n_channels, n_freqs, n_timepoints).
     sparam_df : pd.DataFrame
         Dataframe containing spectral parameterization results for all trials.
+    info : mne.Info
+        Info object containing metadata for MNE epochs.
     save_fname : str
         Filename to save spectral parameterization results to.  This is used to
         determine the filename for the MNE epochs.
-
-    Returns:
-    --------
-    epochs : mne.Epochs
-        Epochs object containing spectral parameterization results for all
-        trials.
     """
     # Reorganize spectral parameterization DataFrame
     sparam_df = sparam_df.set_index(['trial', 'channel', 'timepoint'])
@@ -277,9 +248,7 @@ def convert_sparam_df_to_mne(tfr_mt, sparam_df, save_fname):
     # Fill remaining NaNs with zero
     sparam_df = sparam_df.fillna(0)
 
-    # Collapse frequencies of TFR
-    info = tfr_mt.copy().average(dim='freqs').info
-
+    # Iterate through each model parameter
     for col in sparam_df.columns:
         # Determine filename for selected model parameter
         col_epochs_fname = save_fname.replace('_epo', f'_{col}_epo')
@@ -298,8 +267,7 @@ def convert_sparam_df_to_mne(tfr_mt, sparam_df, save_fname):
 
 def process_one_subject(
         subject_fname, processed_dir=params.PROCESSED_DIR,
-        total_power_dir=params.TOTAL_POWER_DIR, tfr_dir=params.TFR_DIR,
-        sparam_dir=params.SPARAM_DIR):
+        total_power_dir=params.TOTAL_POWER_DIR, sparam_dir=params.SPARAM_DIR):
     """Load EEG and behavioral data and then perform preprocessing for one
     subject.
 
@@ -319,9 +287,6 @@ def process_one_subject(
         Directory to save processed data to.
     total_power_dir : str (default: params.TOTAL_POWER_DIR)
         Directory to save total power data to.
-    tfr_dir : str (default: params.TFR_DIR)
-        Directory to save time-frequency representation (i.e. spectrogram) data
-        to.
     sparam_dir : str (default: params.SPARAM_DIR)
         Directory to save spectral parameterization data to.
     """
@@ -342,21 +307,16 @@ def process_one_subject(
         f'{total_power_dir}/{experiment}_{subject}_total_power_epo.fif')
     compute_total_power(epochs, total_power_fname)
 
-    # Compute spectrogram
-    os.makedirs(tfr_dir, exist_ok=True)
-    tfr_fname = f'{tfr_dir}/{experiment}_{subject}-tfr.h5'
-    tfr_mt = compute_tfr(epochs, tfr_fname)
-
-    # Parameterize spectrogram
+    # Compute and parameterize spectrogram
     subj_sparam_dir = f'{sparam_dir}/{experiment}_{subject}'
     os.makedirs(subj_sparam_dir, exist_ok=True)
-    print(f'\nStarting spectral parameterization for Subject '
+    print(f'\nStarting spectral decomposition and parameterization for Subject '
           f'{experiment}_{subject}')
-    sparam_df = run_sparam_all_trials(tfr_mt, subj_sparam_dir)
+    sparam_df = run_decomp_and_sparam_all_trials(epochs, subj_sparam_dir)
 
     # Extract spectral parameters from model and convert to mne
     sparam_epo_fname = f'{sparam_dir}/{experiment}_{subject}_epo.fif'
-    convert_sparam_df_to_mne(tfr_mt, sparam_df, sparam_epo_fname)
+    convert_sparam_df_to_mne(sparam_df, epochs.info, sparam_epo_fname)
 
 
 def process_all_subjects(
