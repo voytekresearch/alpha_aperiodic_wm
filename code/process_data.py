@@ -8,8 +8,7 @@ import warnings
 import mne
 import ray
 import numpy as np
-from fooof import FOOOFGroup, fit_fooof_3d
-from fooof.objs import combine_fooofs
+from fooof import FOOOFGroup
 from fooof.analysis import get_band_peak_fg
 import pandas as pd
 import params
@@ -128,8 +127,8 @@ def run_decomp_and_sparam_one_trial(
         max_n_peaks=n_peaks, peak_width_limits=peak_width_lims, verbose=False)
 
     # Fit spectral parameterization model
-    fooof_grp = combine_fooofs(fit_fooof_3d(
-        fooof_grp, freqs, tfr_arr, freq_range=(fmin, fmax)))
+    fooof_grp.fit(
+        freqs, tfr_arr.reshape(-1, len(freqs)), freq_range=(fmin, fmax))
 
     # Extract aperiodic and model fit parameters from model
     with warnings.catch_warnings():
@@ -188,31 +187,33 @@ def run_decomp_and_sparam_all_trials(epochs, save_dir):
     # Determine number of trials
     n_trials = epochs.get_data().shape[0]
 
-    # Print remaining trials to compute
-    trials_to_process = sorted(list(set(range(n_trials)) - set(
-        trials_computed)))
-    print(f'Already processed: {len(trials_computed)}\n'
-          f'Still to process: {len(trials_to_process)}\n')
+    # If not all trials have been computed, compute remaining trials
+    if not len(trials_computed) == n_trials:
+        # Print remaining trials to compute
+        trials_to_process = sorted(list(set(range(n_trials)) - set(
+            trials_computed)))
+        print(f'Already processed: {len(trials_computed)}\n'
+            f'Still to process: {len(trials_to_process)}\n')
 
-    # Iterate through each trial of data
-    ray.init(address=os.environ["ip_head"])
-    epochs_id = ray.put(epochs)
+        # Iterate through each trial of data
+        ray.init(address=os.environ["ip_head"])
+        epochs_id = ray.put(epochs)
 
-    # Fit spectral parameterization model for one trial
-    result_ids = [run_decomp_and_sparam_one_trial.remote(
-        epochs_id, trial_num) for trial_num in trials_to_process]
+        # Fit spectral parameterization model for one trial
+        result_ids = [run_decomp_and_sparam_one_trial.remote(
+            epochs_id, trial_num) for trial_num in trials_to_process]
 
-    # Save trial data as processed
-    while result_ids:
-        done_id, result_ids = ray.wait(result_ids)
+        # Save trial data as processed
+        while result_ids:
+            done_id, result_ids = ray.wait(result_ids)
 
-        # Save trial DataFrame
-        trial_num, sparam_df_one_trial = ray.get(done_id[0])
-        save_fname = f'{save_dir}/sparam_trial{trial_num}.csv'
-        sparam_df_one_trial.to_csv(save_fname, index=False)
+            # Save trial DataFrame
+            trial_num, sparam_df_one_trial = ray.get(done_id[0])
+            save_fname = f'{save_dir}/sparam_trial{trial_num}.csv'
+            sparam_df_one_trial.to_csv(save_fname, index=False)
 
-    # Shut down ray
-    ray.shutdown()
+        # Shut down ray
+        ray.shutdown()
 
     # Concatenate all trial DataFrames
     sparam_df_all_trials = pd.DataFrame([])
@@ -220,7 +221,6 @@ def run_decomp_and_sparam_all_trials(epochs, save_dir):
         sparam_df_one_trial = pd.read_csv(f'{save_dir}/{fname}')
         sparam_df_all_trials = pd.concat(
             [sparam_df_all_trials, sparam_df_one_trial], ignore_index=True)
-        print(sparam_df_all_trials.shape)
     return sparam_df_all_trials
 
 
