@@ -266,7 +266,7 @@ def convert_sparam_df_to_mne(sparam_df, info, save_fname):
 
 
 def process_one_subject(
-        subject_fname, processed_dir=params.PROCESSED_DIR,
+        experiment, subject, processed_dir=params.PROCESSED_DIR,
         total_power_dir=params.TOTAL_POWER_DIR, sparam_dir=params.SPARAM_DIR):
     """Load EEG and behavioral data and then perform preprocessing for one
     subject.
@@ -281,8 +281,10 @@ def process_one_subject(
 
     Parameters:
     -----------
-    subject_fname : str
-        Filename of subject's EEG data.
+    experiment : str
+        Name of experiment.
+    subject : str
+        Name of subject.
     processed_dir : str (default: params.PROCESSED_DIR)
         Directory to save processed data to.
     total_power_dir : str (default: params.TOTAL_POWER_DIR)
@@ -290,9 +292,17 @@ def process_one_subject(
     sparam_dir : str (default: params.SPARAM_DIR)
         Directory to save spectral parameterization data to.
     """
-    # Extract experiment and subject from filename
-    experiment, subject = subject_fname.split('_')[:2]
-    subject = int(subject)
+    # Determine whether subject has already been processed
+    subject_fifs = [f for f in os.listdir(sparam_dir) if f.startswith(
+        f'{experiment}_{subject}_') and f.endswith('.fif')]
+
+    # See if each of 7 parameters have been computed
+    # (offset, exponent, CF, PW, BW, R^2, error)
+    if len(subject_fifs) == 7:
+        return
+
+    # Print subject info
+    print(f'\nProcessing Subject {experiment}_{subject}')
 
     # Make directory to save data to if necessary
     os.makedirs(processed_dir, exist_ok=True)
@@ -337,7 +347,10 @@ def process_all_subjects(
     # Process each subject's data
     subject_files = os.listdir(processed_dir)
     for subject_fname in subject_files:
-        process_one_subject(subject_fname)
+        # Extract experiment and subject from filename
+        experiment, subject = subject_fname.split('_')[:2]
+        subject = int(subject)
+        process_one_subject(experiment, subject)
 
 
 if __name__ == '__main__':
