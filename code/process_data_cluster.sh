@@ -4,8 +4,8 @@
 #SBATCH --nodes=1
 #SBATCH --exclusive
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=72
-#SBATCH --mem-per-cpu=1G
+#SBATCH --cpus-per-task=68
+#SBATCH --mem-per-cpu=10G
 #SBATCH --output=process_data_cluster.out
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=abender@ucsd.edu
