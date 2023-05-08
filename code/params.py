@@ -4,7 +4,7 @@
 import numpy as np
 
 # Directories
-DATA_DIR = '/home/AD/abender/decoding_spatial_wm/data'
+DATA_DIR = '/pentagon/bvoyteklab/decoding_spatial_wm/data'
 DOWNLOAD_DIR = f'{DATA_DIR}/by_experiment'
 PROCESSED_DIR = f'{DATA_DIR}/by_subject'
 TOTAL_POWER_DIR = f'{DATA_DIR}/total_power'
