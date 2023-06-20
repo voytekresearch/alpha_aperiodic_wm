@@ -11,7 +11,7 @@
 #SBATCH --mail-user=abender@ucsd.edu
 
 # Set up environment
-cd /pentagon/bvoyteklab/decoding_spatial_wm
+cd /home/AD/abender/decoding_spatial_wm
 source .env/bin/activate
 
 # Obtain head node IP address
