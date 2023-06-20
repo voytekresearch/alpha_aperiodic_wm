@@ -9,15 +9,16 @@ from train_and_test_iem import plot_ctf_slope, train_and_test_all_subjs
 
 if __name__ == '__main__':
     # Reproduce total alpha power IEM
-    _, tot_pw_ctf_slopes, _ = train_and_test_all_subjs('total_power')
+    _, tot_pw_ctf_slopes, _ = train_and_test_all_subjs(
+        'total_power', params.TOTAL_POWER_DIR)
 
     # Decode spatial location from alpha oscillatory power
     _, pw_ctf_slopes, t_arr = train_and_test_all_subjs(
-        'PW', processed_dir=params.SPARAM_DIR)
+        'PW', params.SPARAM_DIR)
 
     # Decode spatial location from aperiodic exponent
     _, exp_ctf_slopes, _ = train_and_test_all_subjs(
-        'exponent', processed_dir=params.SPARAM_DIR)
+        'exponent', params.SPARAM_DIR)
 
     # Extract experiments from slopes
     experiments = list(tot_pw_ctf_slopes.keys())

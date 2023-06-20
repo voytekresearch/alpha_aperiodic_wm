@@ -13,8 +13,8 @@ import params
 from iem import IEM
 
 
-def load_processed_data(
-        subj, param, threshold_param=None, threshold_val=None,
+def load_param_data(
+        subj, param, param_dir, threshold_param=None, threshold_val=None,
         processed_dir=params.PROCESSED_DIR, decim_factor=params.DECIM_FACTOR):
     """Load processed EEG and behavioral data for one subject.
 
@@ -41,12 +41,12 @@ def load_processed_data(
         Time course.
     beh_data : dict
         Dictionary containing behavioral data.
-    processed_data : ndarray
-        Array containing processed data for decoding.
+    param_data : ndarray
+        Array containing parameterized data for decoding.
     """
     # Load epoched EEG data
     epochs = mne.read_epochs(os.path.join(
-        processed_dir, f'{subj}_eeg_data_epo.fif'), preload=True)
+        processed_dir, f'{subj}_eeg_epo.fif'), preload=True, verbose=False)
 
     # Get times from epochs, taking account of decimation if applied
     times = epochs.times
@@ -54,23 +54,24 @@ def load_processed_data(
         times = epochs.times[::decim_factor]
 
     # Load behavioral data
-    beh_data = np.load(os.path.join(processed_dir, f'{subj}_beh_data.npz'))
+    beh_data = np.load(os.path.join(processed_dir, f'{subj}_beh.npy'))
 
-    # Load processed data
-    processed_data = mne.read_epochs(os.path.join(
-        processed_dir, f'{subj}_{param}_epo.fif')).get_data()
+    # Load parameterized data
+    param_data = mne.read_epochs(os.path.join(
+        param_dir, f'{subj}_{param}_epo.fif'), verbose=False).get_data()
 
-    # Load processed data for threhsold parameter
+    # Load parameterized data for threhsold parameter
     if threshold_param is not None and threshold_val is not None:
-        thresh_data =  mne.read_epochs(os.path.join(
-        processed_dir, f'{subj}_{threshold_param}_epo.fif')).get_data()
-        processed_data[thresh_data < threshold_val] = np.nan
-    return epochs, times, beh_data, processed_data
+        thresh_fname = os.path.join(
+            param_dir, f'{subj}_{threshold_param}_epo.fif')
+        thresh_data =  mne.read_epochs(thresh_fname, verbose=False).get_data()
+        param_data[thresh_data < threshold_val] = np.nan
+    return epochs, times, beh_data, param_data
 
 
-def average_processed_data_within_trial_blocks(
-        epochs, times, beh_data, processed_data, n_blocks=params.N_BLOCKS):
-    """Averaging processed data across trials within a block for each
+def average_param_data_within_trial_blocks(
+        epochs, times, beh_data, param_data, n_blocks=params.N_BLOCKS):
+    """Averaging parameterized data across trials within a block for each
     location bin.
 
     Parameters
@@ -81,44 +82,44 @@ def average_processed_data_within_trial_blocks(
         Time course.
     beh_data : dict
         Dictionary containing behavioral data.
-    processed_data : ndarray
-        Array containing processed data for decoding.
+    param_data : ndarray
+        Array containing parameterized data for decoding.
     n_blocks : int (default: params.N_BLOCKS)
         Number of blocks to split trials into.
 
     Returns
     -------
-    processed_arr : ndarray
-        Array containing averaged processed data for decoding.
+    param_arr : ndarray
+        Array containing averaged parameterized data for decoding.
     """
     # Extract relative variables from data
-    pos_bins = beh_data['posBin']
-    n_bins = len(set(pos_bins))
+    n_bins = len(set(beh_data))
     n_channels = epochs.get_data().shape[-2]
     n_timepts = len(times)
 
     # Determine number of trials per location bin
-    n_trials_per_bin = np.bincount(pos_bins - 1).min() // n_blocks * n_blocks
-    idx_split_by_vals = np.split(np.argsort(pos_bins), np.where(np.diff(sorted(
-            pos_bins)))[0]+1)
+    n_trials_per_bin = np.bincount(
+        (beh_data - 1).astype(int)).min() // n_blocks * n_blocks
+    idx_split_by_vals = np.split(np.argsort(beh_data), np.where(np.diff(sorted(
+            beh_data)))[0]+1)
 
-    # Calculate processed data for block of trials
-    processed_arr = np.zeros((n_blocks, n_bins, n_channels, n_timepts))
+    # Calculate parameterized data for block of trials
+    param_arr = np.zeros((n_blocks, n_bins, n_channels, n_timepts))
 
     for i, val_split in enumerate(idx_split_by_vals):
         # Randomly permute indices
         idx = np.random.permutation(val_split)[:n_trials_per_bin]
 
-        # Average processed data across block of trials
-        block_avg = np.real(np.nanmean(processed_data[idx, :, :].reshape(
+        # Average parameterized data across block of trials
+        block_avg = np.real(np.nanmean(param_data[idx, :, :].reshape(
             -1, n_blocks, n_channels, n_timepts), axis=0))
 
-        # Add block-averaged processed data to array
-        processed_arr[:, i, :, :] = block_avg
+        # Add block-averaged parameterized data to array
+        param_arr[:, i, :, :] = block_avg
 
     # Rearrange axes of data to work for IEM pipeline
-    processed_arr = np.moveaxis(processed_arr, 2, 0)
-    return processed_arr
+    param_arr = np.moveaxis(param_arr, 2, 0)
+    return param_arr
 
 
 def iem_one_timepoint(train_data, train_labels, test_data, test_labels):
@@ -290,10 +291,9 @@ def plot_ctf_slope(ctf_slopes, t_arr, palette=None, save_fname=None):
 
 
 def train_and_test_one_subj(
-        subj, param, threshold_param=None, threshold_val=None,
+        subj, param, param_dir, threshold_param=None, threshold_val=None,
         n_blocks=params.N_BLOCKS, n_block_iters=params.N_BLOCK_ITERS,
-        save_dir=params.IEM_OUTPUT_DIR, fig_dir=params.FIG_DIR,
-        processed_dir=params.PROCESSED_DIR):
+        save_dir=params.IEM_OUTPUT_DIR, fig_dir=params.FIG_DIR):
     """Train and test one subject.
 
     Parameters
@@ -334,10 +334,10 @@ def train_and_test_one_subj(
     os.makedirs(save_dir, exist_ok=True)
     os.makedirs(fig_dir, exist_ok=True)
 
-    # Load processed data
-    epochs, times, beh_data, processed_data = load_processed_data(
-        subj, param, threshold_param=threshold_param,
-        threshold_val=threshold_val, processed_dir=processed_dir)
+    # Load parameterized data
+    epochs, times, beh_data, param_data = load_param_data(
+        subj, param, param_dir, threshold_param=threshold_param,
+        threshold_val=threshold_val)
 
     # Load channel offset data if already done
     channel_offset_fname = os.path.join(save_dir, f'channel_offset_{subj}.npy')
@@ -362,17 +362,17 @@ def train_and_test_one_subj(
         n_block_iters, n_blocks, IEM().feat_space_range, n_timepts))
     ctf_slope = np.zeros((n_block_iters, n_blocks, n_timepts))
     for block_iter in range(n_block_iters):
-        # Average processed data within trial blocks
-        processed_arr = average_processed_data_within_trial_blocks(
-            epochs, times, beh_data, processed_data)
+        # Average parameterized data within trial blocks
+        param_arr = average_param_data_within_trial_blocks(
+            epochs, times, beh_data, param_data)
 
         # Iterate through blocks
         for test_block_num in range(n_blocks):
             # Split into training and testing data
             train_data = np.delete(
-                processed_arr, test_block_num, axis=1).reshape(
-                    processed_arr.shape[0], -1, processed_arr.shape[-1])
-            test_data = processed_arr[:, test_block_num, :, :]
+                param_arr, test_block_num, axis=1).reshape(
+                    param_arr.shape[0], -1, param_arr.shape[-1])
+            test_data = param_arr[:, test_block_num, :, :]
 
             # Create labels for training and testing
             train_labels = np.tile(IEM().channel_centers, 2)
@@ -399,21 +399,21 @@ def train_and_test_one_subj(
 
 
 def train_and_test_all_subjs(
-        param, threshold_param=None, threshold_val=None,
-        processed_dir=params.PROCESSED_DIR, fig_dir=params.FIG_DIR):
+        param, param_dir, threshold_param=None, threshold_val=None,
+        fig_dir=params.FIG_DIR, verbose=True):
     """Train and test for all subjects,.
 
     Parameters
     ----------
     param : str
         Parameter to use for decoding.
+    param_dir : str
+        Directory containing parameterized data.
     threshold_param : str (default: None)
         Parameter to use for thresholding.  If None, no thresholding will be
         done.
     threshold_val : float (default: None)
         Value to use for thresholding.  If None, no thresholding will be done.
-    processed_dir : str (default: params.PROCESSED_DIR)
-        Directory containing processed data.
     fig_dir : str (default: params.FIG_DIR)
         Directory to save figures to.
 
@@ -428,7 +428,7 @@ def train_and_test_all_subjs(
     """
     # Get all subject IDs
     subjs = sorted(['_'.join(f.split('_')[:2]) for f in os.listdir(
-        processed_dir) if param in f])
+        param_dir) if param in f])
 
     # Get experiments from subjects
     experiments = set([subj.split('_')[0] for subj in subjs])
@@ -439,12 +439,14 @@ def train_and_test_all_subjs(
     t_arr = {experiment: [] for experiment in experiments}
 
     # Process each subject's data
-    for subj in subjs:
+    for i, subj in enumerate(subjs):
+        if verbose:
+            print(f'Processing {subj} {param} ({i+1}/{len(subjs)})')
         experiment = subj.split('_')[0]
         subj_mean_channel_offset, subj_mean_ctf_slope, \
             t_arr[experiment] = train_and_test_one_subj(
-                subj, param, threshold_param=threshold_param,
-                threshold_val=threshold_val, processed_dir=processed_dir)
+                subj, param, param_dir, threshold_param=threshold_param,
+                threshold_val=threshold_val)
         mean_channel_offsets[experiment].append(subj_mean_channel_offset)
         mean_ctf_slopes[experiment].append(subj_mean_ctf_slope)
 
