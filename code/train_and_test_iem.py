@@ -3,6 +3,7 @@
 
 # Import neccesary modules
 import os.path
+import time
 import multiprocessing as mp
 import numpy as np
 import pandas as pd
@@ -441,6 +442,7 @@ def train_and_test_all_subjs(
     # Process each subject's data
     for i, subj in enumerate(subjs):
         if verbose:
+            start = time.time()
             print(f'Processing {subj} {param} ({i+1}/{len(subjs)})')
         experiment = subj.split('_')[0]
         subj_mean_channel_offset, subj_mean_ctf_slope, \
@@ -449,6 +451,9 @@ def train_and_test_all_subjs(
                 threshold_val=threshold_val)
         mean_channel_offsets[experiment].append(subj_mean_channel_offset)
         mean_ctf_slopes[experiment].append(subj_mean_ctf_slope)
+        if verbose:
+            print(f'Finished processing {subj} {param} in '
+                  f'{time.time() - start:.2f} seconds')
 
     # Combine channel offsets across subjects
     mean_channel_offset_all_subjs = {experiment: np.mean(
