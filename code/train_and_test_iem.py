@@ -453,7 +453,7 @@ def train_and_test_all_subjs(
         mean_ctf_slopes[experiment].append(subj_mean_ctf_slope)
         if verbose:
             print(f'Finished processing {subj} {param} in '
-                  f'{time.time() - start:.2f} seconds')
+                  f'{time.time() - start:.2f} seconds\n')
 
     # Combine channel offsets across subjects
     mean_channel_offset_all_subjs = {experiment: np.mean(

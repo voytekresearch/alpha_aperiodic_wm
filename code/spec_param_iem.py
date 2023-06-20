@@ -21,9 +21,9 @@ if __name__ == '__main__':
         'exponent', params.SPARAM_DIR)
 
     # Extract experiments from slopes
-    experiments = list(tot_pw_ctf_slopes.keys())
-    assert experiments == list(pw_ctf_slopes.keys())
-    assert experiments == list(exp_ctf_slopes.keys())
+    experiments = set(tot_pw_ctf_slopes.keys())
+    assert experiments == set(pw_ctf_slopes.keys())
+    assert experiments == set(exp_ctf_slopes.keys())
 
     # Plot CTF slope time courses for parameters from spectral parameterization
     # model
