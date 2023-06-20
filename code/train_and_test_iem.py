@@ -292,8 +292,9 @@ def plot_ctf_slope(ctf_slopes, t_arr, palette=None, save_fname=None):
 def train_and_test_one_subj(
         subj, param, threshold_param=None, threshold_val=None,
         n_blocks=params.N_BLOCKS, n_block_iters=params.N_BLOCK_ITERS,
-        save_dir=params.IEM_OUTPUT_DIR, fig_dir=params.FIG_DIR):
-    """Reproduce one subject.
+        save_dir=params.IEM_OUTPUT_DIR, fig_dir=params.FIG_DIR,
+        processed_dir=params.PROCESSED_DIR):
+    """Train and test one subject.
 
     Parameters
     ----------
@@ -336,7 +337,7 @@ def train_and_test_one_subj(
     # Load processed data
     epochs, times, beh_data, processed_data = load_processed_data(
         subj, param, threshold_param=threshold_param,
-        threshold_val=threshold_val)
+        threshold_val=threshold_val, processed_dir=processed_dir)
 
     # Load channel offset data if already done
     channel_offset_fname = os.path.join(save_dir, f'channel_offset_{subj}.npy')
@@ -400,7 +401,7 @@ def train_and_test_one_subj(
 def train_and_test_all_subjs(
         param, threshold_param=None, threshold_val=None,
         processed_dir=params.PROCESSED_DIR, fig_dir=params.FIG_DIR):
-    """Reproduce all subjects.
+    """Train and test for all subjects,.
 
     Parameters
     ----------
@@ -426,30 +427,42 @@ def train_and_test_all_subjs(
         Array containing time points.
     """
     # Get all subject IDs
-    subjs = sorted([f.split('_')[0] for f in os.listdir(
+    subjs = sorted(['_'.join(f.split('_')[:2]) for f in os.listdir(
         processed_dir) if param in f])
 
+    # Get experiments from subjects
+    experiments = set([subj.split('_')[0] for subj in subjs])
+
+    # Initialize arrays to store data across subjects by experiment
+    mean_channel_offsets = {experiment: [] for experiment in experiments}
+    mean_ctf_slopes = {experiment: [] for experiment in experiments}
+    t_arr = {experiment: [] for experiment in experiments}
+
     # Process each subject's data
-    mean_channel_offsets, mean_ctf_slopes = [], []
     for subj in subjs:
+        experiment = subj.split('_')[0]
         subj_mean_channel_offset, subj_mean_ctf_slope, \
-            t_arr = train_and_test_one_subj(
+            t_arr[experiment] = train_and_test_one_subj(
                 subj, param, threshold_param=threshold_param,
-                threshold_val=threshold_val)
-        mean_channel_offsets.append(subj_mean_channel_offset)
-        mean_ctf_slopes.append(subj_mean_ctf_slope)
+                threshold_val=threshold_val, processed_dir=processed_dir)
+        mean_channel_offsets[experiment].append(subj_mean_channel_offset)
+        mean_ctf_slopes[experiment].append(subj_mean_ctf_slope)
 
     # Combine channel offsets across subjects
-    mean_channel_offset_all_subjs = np.mean(mean_channel_offsets, axis=0)
+    mean_channel_offset_all_subjs = {experiment: np.mean(
+        mean_channel_offsets[experiment], axis=0) for experiment in experiments}
 
     # Collate CTF slopes across subjects
-    mean_ctf_slopes = np.array(mean_ctf_slopes)
+    mean_ctf_slopes = {experiment: np.array(
+        mean_ctf_slopes[experiment]) for experiment in experiments}
 
     # Plot channel offset across subjects
     fig_dir = os.path.join(fig_dir, param)
     if threshold_param is not None and threshold_val is not None:
         fig_dir = os.path.join(fig_dir, f'{threshold_param}>{threshold_val}')
-    fig_fname = os.path.join(fig_dir, 'channel_offset_all')
-    plot_channel_offset(
-        mean_channel_offset_all_subjs, t_arr, save_fname=fig_fname)
+    for experiment in experiments:
+        fig_fname = os.path.join(fig_dir, f'channel_offset_{experiment}')
+        plot_channel_offset(
+            mean_channel_offset_all_subjs[experiment], t_arr[experiment],
+            save_fname=fig_fname)
     return mean_channel_offsets, mean_ctf_slopes, t_arr
