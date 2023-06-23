@@ -3,6 +3,7 @@
 
 # Import neccesary modules
 import os.path
+import sys
 import time
 import multiprocessing as mp
 import numpy as np
@@ -45,33 +46,40 @@ def load_param_data(
     param_data : ndarray
         Array containing parameterized data for decoding.
     """
+    # Load behavioral data
+    beh_data = np.load(os.path.join(processed_dir, f'{subj}_beh.npy'))
+    beh_nan = np.isnan(beh_data)
+    beh_data = beh_data[~beh_nan]
+
     # Load epoched EEG data
     epochs = mne.read_epochs(os.path.join(
         processed_dir, f'{subj}_eeg_epo.fif'), preload=True, verbose=False)
+    epochs.drop(beh_nan, verbose=False)
 
     # Get times from epochs, taking account of decimation if applied
     times = epochs.times
     if param != 'total_power':
         times = epochs.times[::decim_factor]
 
-    # Load behavioral data
-    beh_data = np.load(os.path.join(processed_dir, f'{subj}_beh.npy'))
-
     # Load parameterized data
     param_data = mne.read_epochs(os.path.join(
         param_dir, f'{subj}_{param}_epo.fif'), verbose=False).get_data()
+    param_data = param_data[~beh_nan, :, :]
 
     # Load parameterized data for threhsold parameter
     if threshold_param is not None and threshold_val is not None:
         thresh_fname = os.path.join(
             param_dir, f'{subj}_{threshold_param}_epo.fif')
         thresh_data =  mne.read_epochs(thresh_fname, verbose=False).get_data()
-        param_data[thresh_data < threshold_val] = np.nan
+        thresh_data = thresh_data[~beh_nan, :, :]
+        param_data = param_data[thresh_data >= threshold_val, :, :]
+        beh_data = beh_data[thresh_data >= threshold_val]
+        epochs.drop(thresh_data < threshold_val, verbose=False)
     return epochs, times, beh_data, param_data
 
 
 def average_param_data_within_trial_blocks(
-        epochs, times, beh_data, param_data, n_blocks=params.N_BLOCKS):
+        epochs, times, beh_data, param_data, subj, n_blocks=params.N_BLOCKS):
     """Averaging parameterized data across trials within a block for each
     location bin.
 
@@ -94,13 +102,14 @@ def average_param_data_within_trial_blocks(
         Array containing averaged parameterized data for decoding.
     """
     # Extract relative variables from data
-    n_bins = len(set(beh_data))
+    assert np.count_nonzero(np.isnan(beh_data)) == 0
+    n_bins = np.sum(~np.isnan(np.unique(beh_data)))
     n_channels = epochs.get_data().shape[-2]
     n_timepts = len(times)
 
     # Determine number of trials per location bin
-    n_trials_per_bin = np.bincount(
-        (beh_data - 1).astype(int)).min() // n_blocks * n_blocks
+    _, counts = np.unique(beh_data, return_counts=True)
+    n_trials_per_bin = counts.min() // n_blocks * n_blocks
     idx_split_by_vals = np.split(np.argsort(beh_data), np.where(np.diff(sorted(
             beh_data)))[0]+1)
 
@@ -157,7 +166,6 @@ def iem_one_timepoint(train_data, train_labels, test_data, test_labels):
     # Compute mean channel offset and CTF slope
     iem.compute_mean_channel_offset()
     iem.compute_ctf_slope()
-
     return iem.mean_channel_offset, iem.ctf_slope
 
 
@@ -198,7 +206,8 @@ def iem_one_block(
             train_data_one_tp, test_data_one_tp in zip(*data_one_tp)])
 
     # Parallelize training and testing of IEM across time points
-    with mp.Pool() as pool:
+    n_processes = os.cpu_count if len(sys.argv) == 1 else int(sys.argv[1])
+    with mp.Pool(n_processes) as pool:
         pool_out = pool.starmap(iem_one_timepoint, args)
     mean_channel_offset, ctf_slope = list(zip(*pool_out))
     return np.array(mean_channel_offset).T, np.array(ctf_slope)
@@ -294,7 +303,7 @@ def plot_ctf_slope(ctf_slopes, t_arr, palette=None, save_fname=None):
 def train_and_test_one_subj(
         subj, param, param_dir, threshold_param=None, threshold_val=None,
         n_blocks=params.N_BLOCKS, n_block_iters=params.N_BLOCK_ITERS,
-        save_dir=params.IEM_OUTPUT_DIR, fig_dir=params.FIG_DIR):
+        save_dir=params.IEM_OUTPUT_DIR, fig_dir=params.FIG_DIR, verbose=True):
     """Train and test one subject.
 
     Parameters
@@ -326,6 +335,9 @@ def train_and_test_one_subj(
     times : ndarray
         Array containing time points.
     """
+    # Start timer
+    start = time.time()
+
     # Make directories specific to parameter
     save_dir = os.path.join(save_dir, param)
     fig_dir = os.path.join(fig_dir, param)
@@ -355,7 +367,13 @@ def train_and_test_one_subj(
         fig_fname = os.path.join(fig_dir, f'channel_offset_{subj}')
         plot_channel_offset(
             mean_channel_offset, times, save_fname=fig_fname)
+
+        # Print loading time if desired
+        if verbose:
+            print(f'Loading {param} data for {subj} took '
+                  f'{time.time() - start:.3f} s')
         return mean_channel_offset, mean_ctf_slope, times
+
 
     # Iterate through sets of blocks
     n_timepts = len(times)
@@ -365,7 +383,7 @@ def train_and_test_one_subj(
     for block_iter in range(n_block_iters):
         # Average parameterized data within trial blocks
         param_arr = average_param_data_within_trial_blocks(
-            epochs, times, beh_data, param_data)
+            epochs, times, beh_data, param_data, subj)
 
         # Iterate through blocks
         for test_block_num in range(n_blocks):
@@ -396,12 +414,17 @@ def train_and_test_one_subj(
     fig_fname = os.path.join(fig_dir, f'channel_offset_{subj}')
     plot_channel_offset(
         mean_channel_offset, times, save_fname=fig_fname)
+
+    # Print processing time if desired
+    if verbose:
+        print(f'Processing {param} data for {subj} took '
+              f'{time.time() - start:.3f} s')
     return mean_channel_offset, mean_ctf_slope, times
 
 
 def train_and_test_all_subjs(
         param, param_dir, threshold_param=None, threshold_val=None,
-        fig_dir=params.FIG_DIR, verbose=True):
+        fig_dir=params.FIG_DIR):
     """Train and test for all subjects,.
 
     Parameters
@@ -432,7 +455,7 @@ def train_and_test_all_subjs(
         param_dir) if param in f])
 
     # Get experiments from subjects
-    experiments = set([subj.split('_')[0] for subj in subjs])
+    experiments = {subj.split('_')[0] for subj in subjs}
 
     # Initialize arrays to store data across subjects by experiment
     mean_channel_offsets = {experiment: [] for experiment in experiments}
@@ -440,20 +463,16 @@ def train_and_test_all_subjs(
     t_arr = {experiment: [] for experiment in experiments}
 
     # Process each subject's data
-    for i, subj in enumerate(subjs):
-        if verbose:
-            start = time.time()
-            print(f'Processing {subj} {param} ({i+1}/{len(subjs)})')
+    for subj in subjs:
+        # Train and test for one subject
+        mean_channel_offset, mean_ctf_slope, t_arr = train_and_test_one_subj(
+            subj, param, param_dir, threshold_param=threshold_param,
+            threshold_val=threshold_val)
+
+        # Add data to big arrays
         experiment = subj.split('_')[0]
-        subj_mean_channel_offset, subj_mean_ctf_slope, \
-            t_arr[experiment] = train_and_test_one_subj(
-                subj, param, param_dir, threshold_param=threshold_param,
-                threshold_val=threshold_val)
-        mean_channel_offsets[experiment].append(subj_mean_channel_offset)
-        mean_ctf_slopes[experiment].append(subj_mean_ctf_slope)
-        if verbose:
-            print(f'Finished processing {subj} {param} in '
-                  f'{time.time() - start:.2f} seconds\n')
+        mean_channel_offsets[experiment].append(mean_channel_offset)
+        mean_ctf_slopes[experiment].append(mean_ctf_slope)
 
     # Combine channel offsets across subjects
     mean_channel_offset_all_subjs = {experiment: np.mean(
