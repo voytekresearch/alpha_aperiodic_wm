@@ -206,8 +206,7 @@ def iem_one_block(
             train_data_one_tp, test_data_one_tp in zip(*data_one_tp)])
 
     # Parallelize training and testing of IEM across time points
-    n_processes = os.cpu_count() if len(sys.argv) == 1 else int(sys.argv[1])
-    with mp.Pool(n_processes) as pool:
+    with mp.Pool() as pool:
         pool_out = pool.starmap(iem_one_timepoint, args)
     mean_channel_offset, ctf_slope = list(zip(*pool_out))
     return np.array(mean_channel_offset).T, np.array(ctf_slope)
@@ -471,9 +470,15 @@ def train_and_test_all_subjs(
 
         # Add data to big arrays
         experiment = subj.split('_')[0]
-        mean_channel_offsets[experiment].append(mean_channel_offset)
-        mean_ctf_slopes[experiment].append(mean_ctf_slope)
-        t_arrays[experiment] = t_arr
+        subj_mean_channel_offset, subj_mean_ctf_slope, \
+            t_arr[experiment] = train_and_test_one_subj(
+                subj, param, param_dir, threshold_param=threshold_param,
+                threshold_val=threshold_val)
+        mean_channel_offsets[experiment].append(subj_mean_channel_offset)
+        mean_ctf_slopes[experiment].append(subj_mean_ctf_slope)
+        if verbose:
+            print(f'Finished processing {subj} {param} in '
+                  f'{time.time() - start:.2f} seconds\n')
 
     # Combine channel offsets across subjects
     mean_channel_offset_all_subjs = {experiment: np.mean(

@@ -15,4 +15,4 @@ cd /home/AD/abender/decoding_spatial_wm
 source .env/bin/activate
 
 # Call Python script
-python code/spec_param_iem.py 8
+python code/spec_param_iem.py
