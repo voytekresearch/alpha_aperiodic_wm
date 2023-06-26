@@ -460,7 +460,7 @@ def train_and_test_all_subjs(
     # Initialize arrays to store data across subjects by experiment
     mean_channel_offsets = {experiment: [] for experiment in experiments}
     mean_ctf_slopes = {experiment: [] for experiment in experiments}
-    t_arr = {experiment: [] for experiment in experiments}
+    t_arrays = {experiment: [] for experiment in experiments}
 
     # Process each subject's data
     for subj in subjs:
@@ -473,6 +473,7 @@ def train_and_test_all_subjs(
         experiment = subj.split('_')[0]
         mean_channel_offsets[experiment].append(mean_channel_offset)
         mean_ctf_slopes[experiment].append(mean_ctf_slope)
+        t_arrays[experiment] = t_arr
 
     # Combine channel offsets across subjects
     mean_channel_offset_all_subjs = {experiment: np.mean(
@@ -489,6 +490,6 @@ def train_and_test_all_subjs(
     for experiment in experiments:
         fig_fname = os.path.join(fig_dir, f'channel_offset_{experiment}')
         plot_channel_offset(
-            mean_channel_offset_all_subjs[experiment], t_arr[experiment],
+            mean_channel_offset_all_subjs[experiment], t_arrays[experiment],
             save_fname=fig_fname)
-    return mean_channel_offsets, mean_ctf_slopes, t_arr
+    return mean_channel_offsets, mean_ctf_slopes, t_arrays

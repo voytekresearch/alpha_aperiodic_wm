@@ -13,7 +13,7 @@ if __name__ == '__main__':
         'total_power', params.TOTAL_POWER_DIR)
 
     # Decode spatial location from alpha oscillatory power
-    _, pw_ctf_slopes, t_arr = train_and_test_all_subjs(
+    _, pw_ctf_slopes, t_arrays = train_and_test_all_subjs(
         'PW', params.SPARAM_DIR)
 
     # Decode spatial location from aperiodic exponent
@@ -35,4 +35,5 @@ if __name__ == '__main__':
             'Alpha oscillatory power': -pw_ctf_slopes[experiment],
             'Aperiodic exponent': -exp_ctf_slopes[experiment]}
         plot_ctf_slope(
-            ctf_slopes, t_arr, palette='Set1', save_fname=ctf_slopes_fname)
+            ctf_slopes, t_arrays[experiment], palette='Set1',
+            save_fname=ctf_slopes_fname)
