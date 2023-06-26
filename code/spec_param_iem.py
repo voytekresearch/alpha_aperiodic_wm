@@ -20,20 +20,16 @@ if __name__ == '__main__':
     _, exp_ctf_slopes, _ = train_and_test_all_subjs(
         'exponent', params.SPARAM_DIR)
 
-    # Extract experiments from slopes
-    experiments = set(tot_pw_ctf_slopes.keys())
-    assert experiments == set(pw_ctf_slopes.keys())
-    assert experiments == set(exp_ctf_slopes.keys())
-
     # Plot CTF slope time courses for parameters from spectral parameterization
     # model
-    for experiment in experiments:
+    for task_num, (experiment, _) in enumerate(params.SUBJECTS_BY_TASK):
         ctf_slopes_fname = os.path.join(
-            params.FIG_DIR, f'ctf_slopes_{experiment}.png')
+            params.FIG_DIR, f'ctf_slopes_{experiment}_task{task_num}.png')
         ctf_slopes = {
-            'Alpha total power': -tot_pw_ctf_slopes[experiment],
-            'Alpha oscillatory power': -pw_ctf_slopes[experiment],
-            'Aperiodic exponent': -exp_ctf_slopes[experiment]}
+            'Alpha total power': -tot_pw_ctf_slopes[task_num],
+            'Alpha oscillatory power': -pw_ctf_slopes[task_num],
+            'Aperiodic exponent': -exp_ctf_slopes[task_num]}
         plot_ctf_slope(
-            ctf_slopes, t_arrays[experiment], palette='Set1',
+            ctf_slopes, t_arrays[task_num],
+            task_timings=params.TASK_TIMINGS[task_num], palette='Set1',
             save_fname=ctf_slopes_fname)

@@ -14,6 +14,22 @@ EEG_DIR = 'EEG'
 FIG_DIR = 'figs'
 
 # Experiment variable
+SUBJECTS_BY_TASK = (('JNP', tuple(range(15))),
+                    ('JNP', tuple(range(15, 30))),
+                    ('JNP', tuple(range(30, 45))),
+                    ('CB1', tuple(range(12))),
+                    ('CB2', tuple(range(18))),
+                    ('CB2', tuple(range(18, 32))),
+                    ('CS', tuple(range(24))),
+                    ('SB', tuple(range(36))))
+TASK_TIMINGS = ((0.25, 2.0),
+                (1.0, 2.0),
+                (0.25, 2.0),
+                (0.1, 1.3),
+                (0.1, 1.25),
+                (0.1, 1.25),
+                (0.25, 1.25),
+                (0.25, 1.3))
 NUM_SUBJECTS = {'CB1': 12, 'CB2': 32, 'CS': 24, 'JNP': 44, 'SB': 36}
 BAD_SUBJECTS = {'CB1': (),
                 'CB2': (25, 27),

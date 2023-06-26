@@ -248,7 +248,8 @@ def plot_channel_offset(channel_offset_arr, t_arr, save_fname=None):
     plt.close()
 
 
-def plot_ctf_slope(ctf_slopes, t_arr, palette=None, save_fname=None):
+def plot_ctf_slope(
+        ctf_slopes, t_arr, task_timings, palette=None, save_fname=None):
     """Plot channel tuning function (CTF) across time for multiple
     parameters.
 
@@ -285,8 +286,8 @@ def plot_ctf_slope(ctf_slopes, t_arr, palette=None, save_fname=None):
         data=ctf_slopes_big_df, hue='Parameter', x='Time (s)', y='CTF slope',
         palette=palette)
     plt.axvline(0.0, c='gray', ls='--')
-    plt.axvline(0.25, c='gray', ls='--')
-    plt.axvline(2.0, c='gray', ls='--')
+    plt.axvline(task_timings[0], c='gray', ls='--')
+    plt.axvline(task_timings[1], c='gray', ls='--')
     plt.xlabel('Time (s)', size=20)
     plt.ylabel('CTF slope', size=20)
     plt.xticks(size=12)
@@ -423,7 +424,7 @@ def train_and_test_one_subj(
 
 def train_and_test_all_subjs(
         param, param_dir, threshold_param=None, threshold_val=None,
-        fig_dir=params.FIG_DIR, verbose=True):
+        fig_dir=params.FIG_DIR, subjects_by_task=params.SUBJECTS_BY_TASK):
     """Train and test for all subjects,.
 
     Parameters
@@ -449,20 +450,14 @@ def train_and_test_all_subjs(
     t_arr : ndarray
         Array containing time points.
     """
-    # Start timer
-    start = time.time()
-
     # Get all subject IDs
     subjs = sorted(['_'.join(f.split('_')[:2]) for f in os.listdir(
         param_dir) if param in f])
 
-    # Get experiments from subjects
-    experiments = {subj.split('_')[0] for subj in subjs}
-
     # Initialize arrays to store data across subjects by experiment
-    mean_channel_offsets = {experiment: [] for experiment in experiments}
-    mean_ctf_slopes = {experiment: [] for experiment in experiments}
-    t_arrays = {experiment: [] for experiment in experiments}
+    mean_channel_offsets = [[] for _ in range(len(subjects_by_task))]
+    mean_ctf_slopes = [[] for _ in range(len(subjects_by_task))]
+    t_arrays = [[] for _ in range(len(subjects_by_task))]
 
     # Process each subject's data
     for subj in subjs:
@@ -472,29 +467,28 @@ def train_and_test_all_subjs(
             threshold_val=threshold_val)
 
         # Add data to big arrays
-        experiment = subj.split('_')[0]
-        mean_channel_offsets[experiment].append(mean_channel_offset)
-        mean_ctf_slopes[experiment].append(mean_ctf_slope)
-        t_arrays[experiment] = t_arr
-        if verbose:
-            print(f'Finished processing {subj} {param} in '
-                  f'{time.time() - start:.2f} seconds\n')
+        experiment, subj_num = subj.split('_')
+        task_num = np.argmax([exp == experiment and int(
+            subj_num) in ids for exp, ids in subjects_by_task])
+        mean_channel_offsets[task_num].append(mean_channel_offset)
+        mean_ctf_slopes[task_num].append(mean_ctf_slope)
+        t_arrays[task_num] = t_arr
 
     # Combine channel offsets across subjects
-    mean_channel_offset_all_subjs = {experiment: np.mean(
-        mean_channel_offsets[experiment], axis=0) for experiment in experiments}
+    mean_channel_offset_all_subjs = [np.mean(
+        channel_offset, axis=0) for channel_offset in mean_channel_offsets]
 
     # Collate CTF slopes across subjects
-    mean_ctf_slopes = {experiment: np.array(
-        mean_ctf_slopes[experiment]) for experiment in experiments}
+    mean_ctf_slopes = [np.array(ctf_slope) for ctf_slope in mean_ctf_slopes]
 
     # Plot channel offset across subjects
     fig_dir = os.path.join(fig_dir, param)
     if threshold_param is not None and threshold_val is not None:
         fig_dir = os.path.join(fig_dir, f'{threshold_param}>{threshold_val}')
-    for experiment in experiments:
-        fig_fname = os.path.join(fig_dir, f'channel_offset_{experiment}')
+    for task_num, (experiment, _) in enumerate(subjects_by_task):
+        fig_fname = os.path.join(
+            fig_dir, f'channel_offset_{experiment}_task{task_num}')
         plot_channel_offset(
-            mean_channel_offset_all_subjs[experiment], t_arrays[experiment],
+            mean_channel_offset_all_subjs[task_num], t_arrays[task_num],
             save_fname=fig_fname)
     return mean_channel_offsets, mean_ctf_slopes, t_arrays
