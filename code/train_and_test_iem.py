@@ -423,7 +423,7 @@ def train_and_test_one_subj(
 
 def train_and_test_all_subjs(
         param, param_dir, threshold_param=None, threshold_val=None,
-        fig_dir=params.FIG_DIR):
+        fig_dir=params.FIG_DIR, verbose=True):
     """Train and test for all subjects,.
 
     Parameters
@@ -449,6 +449,9 @@ def train_and_test_all_subjs(
     t_arr : ndarray
         Array containing time points.
     """
+    # Start timer
+    start = time.time()
+
     # Get all subject IDs
     subjs = sorted(['_'.join(f.split('_')[:2]) for f in os.listdir(
         param_dir) if param in f])
