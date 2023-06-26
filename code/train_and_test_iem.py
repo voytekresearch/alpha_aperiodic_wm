@@ -473,12 +473,9 @@ def train_and_test_all_subjs(
 
         # Add data to big arrays
         experiment = subj.split('_')[0]
-        subj_mean_channel_offset, subj_mean_ctf_slope, \
-            t_arr[experiment] = train_and_test_one_subj(
-                subj, param, param_dir, threshold_param=threshold_param,
-                threshold_val=threshold_val)
-        mean_channel_offsets[experiment].append(subj_mean_channel_offset)
-        mean_ctf_slopes[experiment].append(subj_mean_ctf_slope)
+        mean_channel_offsets[experiment].append(mean_channel_offset)
+        mean_ctf_slopes[experiment].append(mean_ctf_slope)
+        t_arrays[experiment] = t_arr
         if verbose:
             print(f'Finished processing {subj} {param} in '
                   f'{time.time() - start:.2f} seconds\n')
