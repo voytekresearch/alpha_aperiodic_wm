@@ -240,6 +240,7 @@ def convert_sparam_df_to_mne(sparam_df, info, save_fname):
     """
     # Reorganize spectral parameterization DataFrame
     sparam_df = sparam_df.set_index(['trial', 'channel', 'timepoint'])
+    sparam_df = sparam_df.sort_index()
     if len(sparam_df) != np.prod(sparam_df.index.levshape):
         sparam_df = sparam_df.reindex(pd.MultiIndex.from_product(
             [np.arange(n) for n in sparam_df.index.levshape],
@@ -292,6 +293,10 @@ def process_one_subject(
     sparam_dir : str (default: params.SPARAM_DIR)
         Directory to save spectral parameterization data to.
     """
+    # Make directory to save data to if necessary
+    os.makedirs(processed_dir, exist_ok=True)
+    os.makedirs(sparam_dir, exist_ok=True)
+
     # Determine whether subject has already been processed
     subject_fifs = [f for f in os.listdir(sparam_dir) if f.startswith(
         f'{experiment}_{subject}_') and f.endswith('.fif')]
@@ -303,9 +308,6 @@ def process_one_subject(
 
     # Print subject info
     print(f'\nProcessing Subject {experiment}_{subject}')
-
-    # Make directory to save data to if necessary
-    os.makedirs(processed_dir, exist_ok=True)
 
     # Load subject's EEG data
     epochs_fname = f'{processed_dir}/{experiment}_{subject}_eeg_epo.fif'
@@ -363,4 +365,4 @@ def process_all_subjects(
 
 
 if __name__ == '__main__':
-    process_all_subjects()
+    process_one_subject('JNP', 4)
