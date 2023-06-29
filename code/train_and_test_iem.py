@@ -491,10 +491,9 @@ def train_and_test_all_subjs(
     fig_dir = os.path.join(fig_dir, param)
     if threshold_param is not None and threshold_val is not None:
         fig_dir = os.path.join(fig_dir, f'{threshold_param}>{threshold_val}')
-    for task_num, (experiment, _) in enumerate(subjects_by_task):
+    for i, (experiment, _) in enumerate(subjects_by_task):
         fig_fname = os.path.join(
-            fig_dir, f'channel_offset_{experiment}_task{task_num}')
+            fig_dir, f'channel_offset_{experiment}_task{i}')
         plot_channel_offset(
-            mean_channel_offset_all_subjs[task_num], t_arrays[task_num],
-            save_fname=fig_fname)
+            mean_channel_offset_all_subjs[i], t_arrays[i], save_fname=fig_fname)
     return mean_channel_offsets, mean_ctf_slopes, t_arrays
