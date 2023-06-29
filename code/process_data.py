@@ -330,7 +330,9 @@ def process_one_subject(
 
 
 def process_all_subjects(
-        niceness=params.NICENESS, processed_dir=params.PROCESSED_DIR):
+        task_num=None, niceness=params.NICENESS,
+        processed_dir=params.PROCESSED_DIR,
+        subjects_by_task=params.SUBJECTS_BY_TASK):
     """Load EEG and behavioral data and then perform preprocessing for all
     subjects.
 
@@ -344,11 +346,18 @@ def process_all_subjects(
     # Set niceness
     os.nice(niceness)
 
+    # If desired, only process subjects from one task
+    if task_num is not None:
+        experiment, subj_ids = subjects_by_task[task_num]
+        subjs = [(experiment, subj_id) for subj_id in subj_ids]
+
     # Process each subject's data
     subject_files = os.listdir(processed_dir)
     for subject_fname in subject_files:
         # Extract experiment and subject from filename
         experiment, subject = subject_fname.split('_')[:2]
+        if (experiment, int(subject)) not in subjs:
+            continue
         subject = int(subject)
         process_one_subject(experiment, subject)
 
