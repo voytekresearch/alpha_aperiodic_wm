@@ -3,7 +3,6 @@
 
 # Import neccesary modules
 import os.path
-import sys
 import time
 import multiprocessing as mp
 import numpy as np
@@ -423,8 +422,9 @@ def train_and_test_one_subj(
 
 
 def train_and_test_all_subjs(
-        param, param_dir, threshold_param=None, threshold_val=None,
-        fig_dir=params.FIG_DIR, subjects_by_task=params.SUBJECTS_BY_TASK):
+        param, param_dir, task_num=None, threshold_param=None,
+        threshold_val=None, fig_dir=params.FIG_DIR,
+        subjects_by_task=params.SUBJECTS_BY_TASK):
     """Train and test for all subjects,.
 
     Parameters
@@ -453,6 +453,12 @@ def train_and_test_all_subjs(
     # Get all subject IDs
     subjs = sorted(['_'.join(f.split('_')[:2]) for f in os.listdir(
         param_dir) if param in f])
+
+    # If desired, only use subjects from one task
+    if task_num is not None:
+        experiment, subj_ids = subjects_by_task[task_num]
+        subjs = ['_'.join((experiment, subj_id)) for subj_id in subj_ids]
+        subjects_by_task = [subjects_by_task[task_num]]
 
     # Initialize arrays to store data across subjects by experiment
     mean_channel_offsets = [[] for _ in range(len(subjects_by_task))]

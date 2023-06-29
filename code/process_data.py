@@ -240,6 +240,7 @@ def convert_sparam_df_to_mne(sparam_df, info, save_fname):
     """
     # Reorganize spectral parameterization DataFrame
     sparam_df = sparam_df.set_index(['trial', 'channel', 'timepoint'])
+    sparam_df = sparam_df.sort_index()
     if len(sparam_df) != np.prod(sparam_df.index.levshape):
         sparam_df = sparam_df.reindex(pd.MultiIndex.from_product(
             [np.arange(n) for n in sparam_df.index.levshape],
@@ -292,6 +293,10 @@ def process_one_subject(
     sparam_dir : str (default: params.SPARAM_DIR)
         Directory to save spectral parameterization data to.
     """
+    # Make directory to save data to if necessary
+    os.makedirs(processed_dir, exist_ok=True)
+    os.makedirs(sparam_dir, exist_ok=True)
+
     # Determine whether subject has already been processed
     subject_fifs = [f for f in os.listdir(sparam_dir) if f.startswith(
         f'{experiment}_{subject}_') and f.endswith('.fif')]
@@ -303,9 +308,6 @@ def process_one_subject(
 
     # Print subject info
     print(f'\nProcessing Subject {experiment}_{subject}')
-
-    # Make directory to save data to if necessary
-    os.makedirs(processed_dir, exist_ok=True)
 
     # Load subject's EEG data
     epochs_fname = f'{processed_dir}/{experiment}_{subject}_eeg_epo.fif'
@@ -330,7 +332,9 @@ def process_one_subject(
 
 
 def process_all_subjects(
-        niceness=params.NICENESS, processed_dir=params.PROCESSED_DIR):
+        task_num=None, niceness=params.NICENESS,
+        processed_dir=params.PROCESSED_DIR,
+        subjects_by_task=params.SUBJECTS_BY_TASK):
     """Load EEG and behavioral data and then perform preprocessing for all
     subjects.
 
@@ -344,14 +348,21 @@ def process_all_subjects(
     # Set niceness
     os.nice(niceness)
 
+    # If desired, only process subjects from one task
+    if task_num is not None:
+        experiment, subj_ids = subjects_by_task[task_num]
+        subjs = [(experiment, subj_id) for subj_id in subj_ids]
+
     # Process each subject's data
     subject_files = os.listdir(processed_dir)
     for subject_fname in subject_files:
         # Extract experiment and subject from filename
         experiment, subject = subject_fname.split('_')[:2]
+        if (experiment, int(subject)) not in subjs:
+            continue
         subject = int(subject)
         process_one_subject(experiment, subject)
 
 
 if __name__ == '__main__':
-    process_all_subjects()
+    process_one_subject('JNP', 4)
