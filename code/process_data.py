@@ -358,8 +358,9 @@ def process_all_subjects(
     for subject_fname in subject_files:
         # Extract experiment and subject from filename
         experiment, subject = subject_fname.split('_')[:2]
-        if (experiment, int(subject)) not in subjs:
-            continue
+        if task_num is not None:
+            if (experiment, int(subject)) not in subjs:
+                continue
         subject = int(subject)
         process_one_subject(experiment, subject)
 
