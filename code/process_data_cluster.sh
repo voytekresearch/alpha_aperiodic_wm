@@ -57,4 +57,4 @@ for ((i = 1; i <= worker_num; i++)); do
 done
 
 # Call Python script
-python code/process_data.py
+python code/process_data.py 0

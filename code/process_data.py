@@ -2,6 +2,7 @@
 
 # Import necessary modules
 import os
+import sys
 import os.path
 import time
 import warnings
@@ -366,4 +367,9 @@ def process_all_subjects(
 
 
 if __name__ == '__main__':
-    process_all_subjects()
+    # Process select task if given as command line argument
+    task_num = None
+    if len(sys.argv) > 1:
+        task_num = int(sys.argv[1])
+        print(f'Processing Task {task_num}')
+    process_all_subjects(task_num=task_num)
