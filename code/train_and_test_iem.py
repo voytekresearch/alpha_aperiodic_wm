@@ -287,6 +287,7 @@ def plot_ctf_slope(
     plt.axvline(0.0, c='gray', ls='--')
     plt.axvline(task_timings[0], c='gray', ls='--')
     plt.axvline(task_timings[1], c='gray', ls='--')
+    plt.title(f'N = {ctf_slopes_big_df.shape[0]} participants', size=30)
     plt.xlabel('Time (s)', size=20)
     plt.ylabel('CTF slope', size=20)
     plt.xticks(size=12)
