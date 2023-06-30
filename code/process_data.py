@@ -365,4 +365,4 @@ def process_all_subjects(
 
 
 if __name__ == '__main__':
-    process_one_subject('JNP', 4)
+    process_all_subjects()
