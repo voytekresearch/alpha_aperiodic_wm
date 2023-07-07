@@ -78,7 +78,7 @@ def load_param_data(
 
 
 def average_param_data_within_trial_blocks(
-        epochs, times, beh_data, param_data, subj, n_blocks=params.N_BLOCKS):
+        epochs, times, beh_data, param_data, n_blocks=params.N_BLOCKS):
     """Averaging parameterized data across trials within a block for each
     location bin.
 
@@ -383,7 +383,7 @@ def train_and_test_one_subj(
     for block_iter in range(n_block_iters):
         # Average parameterized data within trial blocks
         param_arr = average_param_data_within_trial_blocks(
-            epochs, times, beh_data, param_data, subj)
+            epochs, times, beh_data, param_data)
 
         # Iterate through blocks
         for test_block_num in range(n_blocks):
