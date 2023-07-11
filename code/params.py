@@ -10,7 +10,7 @@ PROCESSED_DIR = f'{DATA_DIR}/by_subject'
 TOTAL_POWER_DIR = f'{DATA_DIR}/total_power'
 SPARAM_DIR = f'{DATA_DIR}/sparam'
 IEM_OUTPUT_DIR = f'{DATA_DIR}/iem_output'
-FIG_DIR = f'{DATA_DIR}/figs'
+FIG_DIR = 'figs'
 
 # Experiment variable
 SUBJECTS_BY_TASK = (('JNP', tuple(range(15))),

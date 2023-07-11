@@ -271,7 +271,8 @@ def plot_ctf_slope(
     # Make DataFrame of CTF slopes by time for each parameter
     for param, ctf_slopes_one_param in ctf_slopes.items():
         one_param_df = pd.DataFrame(ctf_slopes_one_param, columns=t_arr)
-        one_param_df['Parameter'] = param
+        one_param_df[
+            'Parameter'] = f'{param} (n={ctf_slopes_one_param.shape[0]})'
         one_param_df = one_param_df.melt(
             id_vars=['Parameter'], var_name='Time (s)', value_name='CTF slope')
         ctf_slopes_dfs.append(one_param_df)
@@ -287,7 +288,6 @@ def plot_ctf_slope(
     plt.axvline(0.0, c='gray', ls='--')
     plt.axvline(task_timings[0], c='gray', ls='--')
     plt.axvline(task_timings[1], c='gray', ls='--')
-    plt.title(f'N = {ctf_slopes_big_df.shape[0]} participants', size=30)
     plt.xlabel('Time (s)', size=20)
     plt.ylabel('CTF slope', size=20)
     plt.xticks(size=12)
