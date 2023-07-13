@@ -9,8 +9,8 @@ import warnings
 import mne
 import ray
 import numpy as np
-from fooof import FOOOFGroup
-from fooof.analysis import get_band_peak_fg
+from fooof import FOOOF, FOOOFGroup
+from fooof.analysis import get_band_peak_fm, get_band_peak_fg
 import pandas as pd
 import params
 
@@ -53,7 +53,7 @@ def compute_total_power(epochs, save_fname, alpha_band=params.ALPHA_BAND):
 
 @ray.remote
 def run_decomp_and_sparam_one_trial(
-        epochs, trial_num, fmin=params.FMIN, fmax=params.FMAX,
+        epochs, trial_num, alpha_cf, fmin=params.FMIN, fmax=params.FMAX,
         n_freqs=params.N_FREQS,time_window_len=params.TIME_WINDOW_LEN,
         decim_factor=params.DECIM_FACTOR, n_peaks=params.N_PEAKS,
         peak_width_lims=params.PEAK_WIDTH_LIMS, freq_band=params.ALPHA_BAND,
@@ -165,7 +165,10 @@ def run_decomp_and_sparam_one_trial(
     return trial_num, sparam_df_one_trial
 
 
-def run_decomp_and_sparam_all_trials(epochs, save_dir):
+def run_decomp_and_sparam_all_trials(
+        epochs, save_dir, fmin=params.FMIN, fmax=params.FMAX,
+        n_peaks=params.N_PEAKS, peak_width_lims=params.PEAK_WIDTH_LIMS,
+        freq_band=params.ALPHA_BAND):
     """For each trial of data, run spectral decomposition and spectral
     parameterization using ray for parallelization.
 
@@ -196,13 +199,24 @@ def run_decomp_and_sparam_all_trials(epochs, save_dir):
         print(f'Already processed: {len(trials_computed)}\n'
             f'Still to process: {len(trials_to_process)}\n')
 
+        # Calculate subject's alpha peak frequency
+        psds, freqs = mne.time_frequency.psd_array_multitaper(
+            epochs.get_data(picks='eeg'), epochs.info['sfreq'], fmin=fmin,
+            fmax=fmax, n_jobs=-1, verbose=False)
+        psd = np.mean(psds, axis=(0, 1))
+        fm = FOOOF(
+            max_n_peaks=n_peaks, peak_width_limits=peak_width_lims,
+            verbose=False)
+        fm.fit(freqs, psd, freq_range=(fmin, fmax))
+        alpha_cf = get_band_peak_fm(fm, freq_band)[0]
+
         # Iterate through each trial of data
         ray.init(address=os.environ["ip_head"])
         epochs_id = ray.put(epochs)
 
         # Fit spectral parameterization model for one trial
         result_ids = [run_decomp_and_sparam_one_trial.remote(
-            epochs_id, trial_num) for trial_num in trials_to_process]
+            epochs_id, trial_num, alpha_cf) for trial_num in trials_to_process]
 
         # Save trial data as processed
         while result_ids:
