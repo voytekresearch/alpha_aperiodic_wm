@@ -2,6 +2,7 @@
 
 #SBATCH --job-name=process_data_cluster
 #SBATCH --nodes=1
+#SBATCH --time=24:00:00
 #SBATCH --exclusive
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=72
@@ -11,8 +12,6 @@
 #SBATCH --mail-user=abender@ucsd.edu
 
 # Set up environment
-ml rustc
-ml cargo
 cd /home/AD/abender/decoding_spatial_wm
 source .env/bin/activate
 
