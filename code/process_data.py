@@ -9,8 +9,10 @@ import warnings
 import mne
 import ray
 import numpy as np
-from fooof import FOOOFGroup
-from fooof.analysis import get_band_peak_fg
+from fooof import FOOOF
+from fooof.objs import combine_fooofs
+from fooof.analysis import get_band_peak_fm, get_band_peak_fg
+from fooof.utils import trim_spectrum
 import pandas as pd
 import params
 
@@ -53,7 +55,7 @@ def compute_total_power(epochs, save_fname, alpha_band=params.ALPHA_BAND):
 
 @ray.remote
 def run_decomp_and_sparam_one_trial(
-        epochs, trial_num, fmin=params.FMIN, fmax=params.FMAX,
+        epochs, trial_num, alpha_cf, fmin=params.FMIN, fmax=params.FMAX,
         n_freqs=params.N_FREQS,time_window_len=params.TIME_WINDOW_LEN,
         decim_factor=params.DECIM_FACTOR, n_peaks=params.N_PEAKS,
         peak_width_lims=params.PEAK_WIDTH_LIMS, freq_band=params.ALPHA_BAND,
@@ -124,36 +126,69 @@ def run_decomp_and_sparam_one_trial(
         print(f'Started spectral parameterization of trial #{trial_num}')
 
     # Initialize FOOOFGroup
-    fooof_grp = FOOOFGroup(
+    fm = FOOOF(
         max_n_peaks=n_peaks, peak_width_limits=peak_width_lims, verbose=False)
 
-    # Fit spectral parameterization model
-    fooof_grp.fit(
-        freqs, tfr_arr.reshape(-1, len(freqs)), freq_range=(fmin, fmax))
+    # Initialize list of fitted models and area parameters
+    n_channels, n_timepts, n_freqs = tfr_arr.shape
+    bands = {'': freq_band, 'SubjCF': alpha_cf + np.array([-2, 2])}
+    area_params_dct = {
+        'logOscAUC': None, 'logTotAUC': None, 'linOscAUC': None,
+        'linTotAUC': None}
+    fit_models = [None] * n_channels * n_timepts
+    area_params = np.zeros((
+        n_channels * n_timepts, len(bands) * len(area_params_dct)))
+
+    # Fit spectral parameterization model for one channel and timepoint
+    for i, psd in enumerate(tfr_arr.reshape(-1, n_freqs)):
+        fm.fit(freqs, psd, freq_range=(fmin, fmax))
+        # Add to list of fitted models
+        fit_models[i] = fm.copy()
+
+        # Determine all areas to extract
+        area_params_dct['logOscAUC'] = fm._spectrum_flat
+        area_params_dct['logTotAUC'] = fm.power_spectrum
+        area_params_dct['linOscAUC'] = 10**fm.power_spectrum - 10**fm._ap_fit
+        area_params_dct['linTotAUC'] = 10**fm.power_spectrum
+        area_params_one_psd = {}
+        for param, spectra in area_params_dct.items():
+            for tag, band in bands.items():
+                freqs_trim, psd_trim = trim_spectrum(freqs, spectra, band)
+                area_params_one_psd[f'{param}{tag}'] = np.trapz(
+                    psd_trim, freqs_trim)
+
+        # Add values to area parameters array
+        area_params[i] = np.array([area_params_one_psd[k] for k in sorted(
+            area_params_one_psd.keys())])
+
+
+    # Combine fits into one FOOOFGroup object
+    fg = combine_fooofs(fit_models)
 
     # Extract aperiodic and model fit parameters from model
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        aperiodic_params = fooof_grp.get_params('aperiodic_params')
-        r_squared = fooof_grp.get_params('r_squared')
-        error = fooof_grp.get_params('error')
+        aperiodic_params = fg.get_params('aperiodic_params')
+        r_squared = fg.get_params('r_squared')
+        error = fg.get_params('error')
 
         # Select only peak parameters with peak frequency in desired frequency
         # band
-        peak_params = get_band_peak_fg(fooof_grp, freq_band)
+        peak_params = get_band_peak_fg(fg, freq_band)
 
     # Put all parameters together
     model_params = np.hstack((
         aperiodic_params, peak_params, r_squared[:, np.newaxis],
-        error[:, np.newaxis]))
+        error[:, np.newaxis], area_params))
 
     # Create DataFrame for trial
-    n_channels, n_timepts, _ = tfr_arr.shape
     index_shape = (1, n_channels, n_timepts)
     index_names = ['trial', 'channel', 'timepoint']
     index = pd.MultiIndex.from_product([
         range(s) for s in index_shape], names=index_names)
     column_names = ['offset', 'exponent', 'CF', 'PW', 'BW', 'R^2', 'error']
+    column_names += sorted(
+        [par + tag for par in area_params_dct.keys() for tag in bands.keys()])
     sparam_df_one_trial = pd.DataFrame(
         model_params, columns=column_names, index=index).reset_index()
     sparam_df_one_trial.loc[:, 'trial'] = trial_num
@@ -165,7 +200,10 @@ def run_decomp_and_sparam_one_trial(
     return trial_num, sparam_df_one_trial
 
 
-def run_decomp_and_sparam_all_trials(epochs, save_dir):
+def run_decomp_and_sparam_all_trials(
+        epochs, save_dir, fmin=params.FMIN, fmax=params.FMAX,
+        n_peaks=params.N_PEAKS, peak_width_lims=params.PEAK_WIDTH_LIMS,
+        freq_band=params.ALPHA_BAND):
     """For each trial of data, run spectral decomposition and spectral
     parameterization using ray for parallelization.
 
@@ -196,13 +234,24 @@ def run_decomp_and_sparam_all_trials(epochs, save_dir):
         print(f'Already processed: {len(trials_computed)}\n'
             f'Still to process: {len(trials_to_process)}\n')
 
+        # Calculate subject's alpha peak frequency
+        psds, freqs = mne.time_frequency.psd_array_multitaper(
+            epochs.get_data(picks='eeg'), epochs.info['sfreq'], fmin=fmin,
+            fmax=fmax, n_jobs=-1, verbose=False)
+        psd = np.mean(psds, axis=(0, 1))
+        fm = FOOOF(
+            max_n_peaks=n_peaks, peak_width_limits=peak_width_lims,
+            verbose=False)
+        fm.fit(freqs, psd, freq_range=(fmin, fmax))
+        alpha_cf = get_band_peak_fm(fm, freq_band)[0]
+
         # Iterate through each trial of data
         ray.init(address=os.environ["ip_head"])
         epochs_id = ray.put(epochs)
 
         # Fit spectral parameterization model for one trial
         result_ids = [run_decomp_and_sparam_one_trial.remote(
-            epochs_id, trial_num) for trial_num in trials_to_process]
+            epochs_id, trial_num, alpha_cf) for trial_num in trials_to_process]
 
         # Save trial data as processed
         while result_ids:
@@ -302,9 +351,9 @@ def process_one_subject(
     subject_fifs = [f for f in os.listdir(sparam_dir) if f.startswith(
         f'{experiment}_{subject}_') and f.endswith('.fif')]
 
-    # See if each of 7 parameters have been computed
-    # (offset, exponent, CF, PW, BW, R^2, error)
-    if len(subject_fifs) == 7:
+    # See if each of 15 parameters have been computed
+    # (offset, exponent, CF, PW, BW, R^2, error) + area parameters
+    if len(subject_fifs) == 15:
         return
 
     # Print subject info
