@@ -11,6 +11,8 @@
 #SBATCH --mail-user=abender@ucsd.edu
 
 # Set up environment
+ml rustc
+ml cargo
 cd /home/AD/abender/decoding_spatial_wm
 source .env/bin/activate
 

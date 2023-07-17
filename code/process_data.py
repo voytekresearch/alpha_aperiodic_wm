@@ -9,7 +9,7 @@ import warnings
 import mne
 import ray
 import numpy as np
-from fooof import FOOOF
+import specparam
 from fooof.objs import combine_fooofs
 from fooof.analysis import get_band_peak_fm, get_band_peak_fg
 from fooof.utils import trim_spectrum
@@ -125,8 +125,8 @@ def run_decomp_and_sparam_one_trial(
     if verbose:
         print(f'Started spectral parameterization of trial #{trial_num}')
 
-    # Initialize FOOOFGroup
-    fm = FOOOF(
+    # Initialize SpecParam model
+    sp = specparam.SpecParam(
         max_n_peaks=n_peaks, peak_width_limits=peak_width_lims, verbose=False)
 
     # Initialize list of fitted models and area parameters
@@ -141,15 +141,17 @@ def run_decomp_and_sparam_one_trial(
 
     # Fit spectral parameterization model for one channel and timepoint
     for i, psd in enumerate(tfr_arr.reshape(-1, n_freqs)):
-        fm.fit(freqs, psd, freq_range=(fmin, fmax))
+        fit_model = sp.fit(freqs, psd)
+
         # Add to list of fitted models
-        fit_models[i] = fm.copy()
+        fit_models[i] = fit_model
 
         # Determine all areas to extract
-        area_params_dct['logOscAUC'] = fm._spectrum_flat
-        area_params_dct['logTotAUC'] = fm.power_spectrum
-        area_params_dct['linOscAUC'] = 10**fm.power_spectrum - 10**fm._ap_fit
-        area_params_dct['linTotAUC'] = 10**fm.power_spectrum
+        area_params_dct['logOscAUC'] = fit_model._spectrum_flat
+        area_params_dct['logTotAUC'] = fit_model.power_spectrum
+        area_params_dct['linOscAUC'] = 10 ** fit_model.power_spectrum - \
+            10 ** fit_model._ap_fit
+        area_params_dct['linTotAUC'] = 10 ** fit_model.power_spectrum
         area_params_one_psd = {}
         for param, spectra in area_params_dct.items():
             for tag, band in bands.items():
@@ -239,14 +241,16 @@ def run_decomp_and_sparam_all_trials(
             epochs.get_data(picks='eeg'), epochs.info['sfreq'], fmin=fmin,
             fmax=fmax, n_jobs=-1, verbose=False)
         psd = np.mean(psds, axis=(0, 1))
-        fm = FOOOF(
+        sp = specparam.SpecParam(
             max_n_peaks=n_peaks, peak_width_limits=peak_width_lims,
             verbose=False)
-        fm.fit(freqs, psd, freq_range=(fmin, fmax))
-        alpha_cf = get_band_peak_fm(fm, freq_band)[0]
+        fit_model = sp.fit(freqs, psd)
+        alpha_cf = get_band_peak_fm(fit_model, freq_band)[0]
 
         # Iterate through each trial of data
-        ray.init(address=os.environ["ip_head"])
+        ray.init(
+            address=os.environ["ip_head"],
+            runtime_env={"py_modules": [specparam]})
         epochs_id = ray.put(epochs)
 
         # Fit spectral parameterization model for one trial
