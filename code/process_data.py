@@ -88,11 +88,6 @@ def run_decomp_and_sparam_one_trial(
     verbose : bool (default: True)
         Whether to print runtime information.
     """
-    # Start timer for spectral decomposition
-    start = time.time()
-    if verbose:
-        print(f'Started spectral decomposition of trial #{trial_num}')
-
     # Make frequencies log-spaced
     freqs = np.linspace(fmin, fmax, n_freqs)
 
@@ -112,15 +107,8 @@ def run_decomp_and_sparam_one_trial(
     # Reshape spectrogram to be (n_channels, n_timepts, n_freqs)
     tfr_arr = np.squeeze(np.swapaxes(trial_tfr.data, 2, 3))
 
-    # Print runtime for spectral decomposition
-    if verbose:
-        print(f'Finished spectral decomposition for trial #{trial_num} in '
-              f'{time.time() - start:.1f} seconds')
-
     # Start timer for spectral parameterization
     start = time.time()
-    if verbose:
-        print(f'Started spectral parameterization of trial #{trial_num}')
 
     # Initialize SpecParam model
     sp = specparam.SpecParam(
