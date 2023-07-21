@@ -3,15 +3,12 @@
 # Import necessary modules
 import os
 import sys
-import os.path
 import time
-import warnings
 import mne
 import ray
 import numpy as np
 import specparam
-from fooof.objs import combine_fooofs
-from fooof.analysis import get_band_peak_fm, get_band_peak_fg
+from fooof.analysis import get_band_peak_fm
 from fooof.utils import trim_spectrum
 import pandas as pd
 import params
@@ -135,7 +132,10 @@ def run_decomp_and_sparam_one_trial(
     area_params_dct = {
         'logOscAUC': None, 'logTotAUC': None, 'linOscAUC': None,
         'linTotAUC': None}
-    fit_models = [None] * n_channels * n_timepts
+    aperiodic_params = np.zeros((n_channels * n_timepts, 2))
+    r_squared = np.zeros((n_channels * n_timepts, 1))
+    mse = np.zeros((n_channels * n_timepts, 1))
+    peak_params = np.zeros((n_channels * n_timepts, 3))
     area_params = np.zeros((
         n_channels * n_timepts, len(bands) * len(area_params_dct)))
 
@@ -143,15 +143,12 @@ def run_decomp_and_sparam_one_trial(
     for i, psd in enumerate(tfr_arr.reshape(-1, n_freqs)):
         fit_model = sp.fit(freqs, psd)
 
-        # Add to list of fitted models
-        fit_models[i] = fit_model
-
         # Determine all areas to extract
         area_params_dct['logOscAUC'] = fit_model._spectrum_flat
-        area_params_dct['logTotAUC'] = fit_model.power_spectrum
-        area_params_dct['linOscAUC'] = 10 ** fit_model.power_spectrum - \
+        area_params_dct['logTotAUC'] = fit_model.powers_log
+        area_params_dct['linOscAUC'] = 10 ** fit_model.powers_log - \
             10 ** fit_model._ap_fit
-        area_params_dct['linTotAUC'] = 10 ** fit_model.power_spectrum
+        area_params_dct['linTotAUC'] = 10 ** fit_model.powers_log
         area_params_one_psd = {}
         for param, spectra in area_params_dct.items():
             for tag, band in bands.items():
@@ -163,32 +160,26 @@ def run_decomp_and_sparam_one_trial(
         area_params[i] = np.array([area_params_one_psd[k] for k in sorted(
             area_params_one_psd.keys())])
 
-
-    # Combine fits into one FOOOFGroup object
-    fg = combine_fooofs(fit_models)
-
-    # Extract aperiodic and model fit parameters from model
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        aperiodic_params = fg.get_params('aperiodic_params')
-        r_squared = fg.get_params('r_squared')
-        error = fg.get_params('error')
+        # Extract aperiodic and model fit parameters from model
+        aperiodic_params[i] = fit_model.aperiodic_params_
+        r_squared[i] = np.corrcoef(
+            fit_model.powers_log, fit_model.powers_log_fit)[0][1] ** 2
+        mse[i] = ((fit_model.powers_log - fit_model.powers_log_fit) ** 2).mean()
 
         # Select only peak parameters with peak frequency in desired frequency
         # band
-        peak_params = get_band_peak_fg(fg, freq_band)
+        peak_params[i] = get_band_peak_fm(fit_model, freq_band)
 
     # Put all parameters together
     model_params = np.hstack((
-        aperiodic_params, peak_params, r_squared[:, np.newaxis],
-        error[:, np.newaxis], area_params))
+        aperiodic_params, peak_params, r_squared, mse, area_params))
 
     # Create DataFrame for trial
     index_shape = (1, n_channels, n_timepts)
     index_names = ['trial', 'channel', 'timepoint']
     index = pd.MultiIndex.from_product([
         range(s) for s in index_shape], names=index_names)
-    column_names = ['offset', 'exponent', 'CF', 'PW', 'BW', 'R^2', 'error']
+    column_names = ['offset', 'exponent', 'CF', 'PW', 'BW', 'R^2', 'MSE']
     column_names += sorted(
         [par + tag for par in area_params_dct.keys() for tag in bands.keys()])
     sparam_df_one_trial = pd.DataFrame(
@@ -249,7 +240,6 @@ def run_decomp_and_sparam_all_trials(
 
         # Iterate through each trial of data
         ray.init(
-            address=os.environ["ip_head"],
             runtime_env={"py_modules": [specparam]})
         epochs_id = ray.put(epochs)
 
@@ -356,7 +346,7 @@ def process_one_subject(
         f'{experiment}_{subject}_') and f.endswith('.fif')]
 
     # See if each of 15 parameters have been computed
-    # (offset, exponent, CF, PW, BW, R^2, error) + area parameters
+    # (offset, exponent, CF, PW, BW, R^2, mse) + area parameters
     if len(subject_fifs) == 15:
         return
 
@@ -408,7 +398,7 @@ def process_all_subjects(
         subjs = [(experiment, subj_id) for subj_id in subj_ids]
 
     # Process each subject's data
-    subject_files = os.listdir(processed_dir)
+    subject_files = sorted(os.listdir(processed_dir))
     for subject_fname in subject_files:
         # Extract experiment and subject from filename
         experiment, subject = subject_fname.split('_')[:2]
