@@ -184,7 +184,7 @@ def run_decomp_and_sparam_one_trial(
 def run_decomp_and_sparam_all_trials(
         epochs, save_dir, fmin=params.FMIN, fmax=params.FMAX,
         n_peaks=params.N_PEAKS, peak_width_lims=params.PEAK_WIDTH_LIMS,
-        freq_band=params.ALPHA_BAND):
+        freq_band=params.ALPHA_BAND, verbose=True):
     """For each trial of data, run spectral decomposition and spectral
     parameterization using ray for parallelization.
 
@@ -200,6 +200,9 @@ def run_decomp_and_sparam_all_trials(
     sparam_df : pd.DataFrame
         DataFrame containing spectral parameterization results for all trials.
     """
+    # Start timer for spectral decomposition and parameterization
+    start = time.time()
+
     # Determine which trials have already been computed
     trials_computed = [int(f.split('.')[0].split('l')[-1]) for f in os.listdir(
         save_dir)]
@@ -212,8 +215,9 @@ def run_decomp_and_sparam_all_trials(
         # Print remaining trials to compute
         trials_to_process = sorted(list(set(range(n_trials)) - set(
             trials_computed)))
-        print(f'Already processed: {len(trials_computed)}\n'
-            f'Still to process: {len(trials_to_process)}\n')
+        if verbose:
+            print(f'Already processed: {len(trials_computed)}\n'
+                f'Still to process: {len(trials_to_process)}\n')
 
         # Calculate subject's alpha peak frequency
         psds, freqs = mne.time_frequency.psd_array_multitaper(
@@ -250,13 +254,21 @@ def run_decomp_and_sparam_all_trials(
     # Concatenate all trial DataFrames
     sparam_df_all_trials = pd.DataFrame([])
     for fname in os.listdir(save_dir):
-        sparam_df_one_trial = pd.read_csv(f'{save_dir}/{fname}')
+        try:
+            sparam_df_one_trial = pd.read_csv(f'{save_dir}/{fname}')
+        except pd.errors.EmptyDataError:
+            continue
         sparam_df_all_trials = pd.concat(
             [sparam_df_all_trials, sparam_df_one_trial], ignore_index=True)
+
+    # Print runtime for spectral decomposition and parameterization
+    if verbose:
+        print(f'\nFinished spectral decomposition and parameterization for '
+              f'{n_trials} trials in {time.time() - start:.1f} seconds')
     return sparam_df_all_trials
 
 
-def convert_sparam_df_to_mne(sparam_df, info, save_fname):
+def convert_sparam_df_to_mne(sparam_df, info, save_fname, verbose=True):
     """Convert spectral parameterization DataFrame to series of MNE epochs, one
     for each relevant spectral parameterization model parameter.
 
@@ -270,6 +282,9 @@ def convert_sparam_df_to_mne(sparam_df, info, save_fname):
         Filename to save spectral parameterization results to.  This is used to
         determine the filename for the MNE epochs.
     """
+    # Start timer for conversion to MNE
+    start = time.time()
+
     # Reorganize spectral parameterization DataFrame
     sparam_df = sparam_df.set_index(['trial', 'channel', 'timepoint'])
     sparam_df = sparam_df.sort_index()
@@ -292,10 +307,15 @@ def convert_sparam_df_to_mne(sparam_df, info, save_fname):
 
         # Make MNE Epochs for selected model parameter
         arr = sparam_df[col].values.reshape(sparam_df.index.levshape)
-        epochs_arr = mne.EpochsArray(arr, info)
+        epochs_arr = mne.EpochsArray(arr, info, verbose=False)
 
         # Save EpochArray
         epochs_arr.save(col_epochs_fname)
+
+    # Print runtime for conversion to MNE
+    if verbose:
+        print(f'\nConverted spectral parameterization results to MNE '
+              f'Epochs in {time.time() - start:.1f} seconds')
 
 
 def process_one_subject(
@@ -343,7 +363,7 @@ def process_one_subject(
 
     # Load subject's EEG data
     epochs_fname = f'{processed_dir}/{experiment}_{subject}_eeg_epo.fif'
-    epochs = mne.read_epochs(epochs_fname)
+    epochs = mne.read_epochs(epochs_fname, verbose=False)
 
     # Calculate total power
     os.makedirs(total_power_dir, exist_ok=True)
