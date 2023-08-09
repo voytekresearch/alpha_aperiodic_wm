@@ -88,7 +88,7 @@ def run_decomp_and_sparam_one_trial(
     verbose : bool (default: True)
         Whether to print runtime information.
     """
-    # Make frequencies log-spaced
+    # Make frequencies linearly spaced
     freqs = np.linspace(fmin, fmax, n_freqs)
 
     # Make time window length consistent across frequencies
