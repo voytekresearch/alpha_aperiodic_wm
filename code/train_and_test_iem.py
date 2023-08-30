@@ -16,7 +16,8 @@ from iem import IEM
 
 def load_param_data(
         subj, param, param_dir, threshold_param=None, threshold_val=None,
-        processed_dir=params.PROCESSED_DIR, decim_factor=params.DECIM_FACTOR):
+        processed_dir=params.PROCESSED_DIR, sparam_dir=params.SPARAM_DIR,
+        decim_factor=params.DECIM_FACTOR):
     """Load processed EEG and behavioral data for one subject.
 
     Parameters
@@ -48,6 +49,16 @@ def load_param_data(
     # Load behavioral data
     beh_data = np.load(os.path.join(processed_dir, f'{subj}_beh.npy'))
     beh_nan = np.isnan(beh_data)
+
+    # Load any skipped trials
+    skipped_fname = f'{sparam_dir}/skipped.csv'
+    if os.path.exists(skipped_fname):
+        skipped_df = pd.read_csv(skipped_fname)
+        skipped_dct = skipped_df.to_dict(orient='list')
+        if subj in skipped_dct.keys():
+            beh_nan[skipped_dct[subj]] = True
+
+    # Remove trials with NaNs
     beh_data = beh_data[~beh_nan]
 
     # Load epoched EEG data

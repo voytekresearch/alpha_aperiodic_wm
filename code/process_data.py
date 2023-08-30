@@ -252,12 +252,12 @@ def run_decomp_and_sparam_all_trials(
         ray.shutdown()
 
     # Concatenate all trial DataFrames
-    sparam_df_all_trials = pd.DataFrame([])
+    sparam_df_all_trials, skipped_lst = pd.DataFrame([]), []
     for fname in os.listdir(save_dir):
         try:
             sparam_df_one_trial = pd.read_csv(f'{save_dir}/{fname}')
         except pd.errors.EmptyDataError:
-            continue
+            skipped_lst.append(int(fname.split('.')[0].split('l')[-1]))
         sparam_df_all_trials = pd.concat(
             [sparam_df_all_trials, sparam_df_one_trial], ignore_index=True)
 
@@ -265,7 +265,7 @@ def run_decomp_and_sparam_all_trials(
     if verbose:
         print(f'\nFinished spectral decomposition and parameterization for '
               f'{n_trials} trials in {time.time() - start:.1f} seconds')
-    return sparam_df_all_trials
+    return sparam_df_all_trials, skipped_lst
 
 
 def convert_sparam_df_to_mne(sparam_df, info, save_fname, verbose=True):
@@ -288,7 +288,7 @@ def convert_sparam_df_to_mne(sparam_df, info, save_fname, verbose=True):
     # Reorganize spectral parameterization DataFrame
     sparam_df = sparam_df.set_index(['trial', 'channel', 'timepoint'])
     sparam_df = sparam_df.sort_index()
-    if len(sparam_df) != np.prod(sparam_df.index.levshape):
+    if len(sparam_df) % np.prod(sparam_df.index.levshape[1:]):
         sparam_df = sparam_df.reindex(pd.MultiIndex.from_product(
             [np.arange(n) for n in sparam_df.index.levshape],
             names=['trial', 'channel', 'timepoint']))
@@ -306,7 +306,7 @@ def convert_sparam_df_to_mne(sparam_df, info, save_fname, verbose=True):
             continue
 
         # Make MNE Epochs for selected model parameter
-        arr = sparam_df[col].values.reshape(sparam_df.index.levshape)
+        arr = sparam_df[col].values.reshape(-1, *sparam_df.index.levshape[1:])
         epochs_arr = mne.EpochsArray(arr, info, verbose=False)
 
         # Save EpochArray
@@ -349,9 +349,12 @@ def process_one_subject(
     os.makedirs(processed_dir, exist_ok=True)
     os.makedirs(sparam_dir, exist_ok=True)
 
+    # Make subject ID from experiment and subject
+    subj_id = f'{experiment}_{subject}'
+
     # Determine whether subject has already been processed
     subject_fifs = [f for f in os.listdir(sparam_dir) if f.startswith(
-        f'{experiment}_{subject}_') and f.endswith('.fif')]
+        f'{subj_id}_') and f.endswith('.fif')]
 
     # See if each of 15 parameters have been computed
     # (offset, exponent, CF, PW, BW, R^2, mse) + area parameters
@@ -359,24 +362,36 @@ def process_one_subject(
         return
 
     # Print subject info
-    print(f'\nProcessing Subject {experiment}_{subject}')
+    print(f'\nProcessing Subject {subj_id}')
 
     # Load subject's EEG data
-    epochs_fname = f'{processed_dir}/{experiment}_{subject}_eeg_epo.fif'
+    epochs_fname = f'{processed_dir}/{subj_id}_eeg_epo.fif'
     epochs = mne.read_epochs(epochs_fname, verbose=False)
 
     # Calculate total power
     os.makedirs(total_power_dir, exist_ok=True)
     total_power_fname = (
-        f'{total_power_dir}/{experiment}_{subject}_total_power_epo.fif')
+        f'{total_power_dir}/{subj_id}_total_power_epo.fif')
     compute_total_power(epochs, total_power_fname)
 
     # Compute and parameterize spectrogram
-    subj_sparam_dir = f'{sparam_dir}/{experiment}_{subject}'
+    subj_sparam_dir = f'{sparam_dir}/{subj_id}'
     os.makedirs(subj_sparam_dir, exist_ok=True)
     print(f'\nStarting spectral decomposition and parameterization for Subject '
-          f'{experiment}_{subject}')
-    sparam_df = run_decomp_and_sparam_all_trials(epochs, subj_sparam_dir)
+          f'{subj_id}')
+    sparam_df, skipped_lst = run_decomp_and_sparam_all_trials(
+        epochs, subj_sparam_dir)
+
+    # Log skipped trials
+    skipped_dct, skipped_fname = {}, f'{sparam_dir}/skipped.csv'
+    if len(skipped_lst) > 0:
+        if os.path.exists(skipped_fname):
+            skipped_df = pd.read_csv(skipped_fname)
+            skipped_dct = skipped_df.to_dict(orient='list')
+        skipped_dct[subj_id] = skipped_lst
+        skipped_df = pd.DataFrame.from_dict(
+            skipped_dct, orient='index').transpose()
+        skipped_df.to_csv(skipped_fname, index=False)
 
     # Extract spectral parameters from model and convert to mne
     sparam_epo_fname = f'{sparam_dir}/{experiment}_{subject}_epo.fif'
