@@ -2,6 +2,7 @@
 
 #SBATCH --job-name=spec_param_iem_cluster
 #SBATCH --nodes=1
+#SBATCH --time=48:00:00
 #SBATCH --exclusive
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
