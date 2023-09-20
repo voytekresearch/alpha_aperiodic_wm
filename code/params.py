@@ -1,5 +1,4 @@
 """All parameters for decoding spatial working memory (WM) from EEG data."""
-
 # Import necessary modules
 import numpy as np
 
