@@ -4,15 +4,43 @@ import mne
 import os
 
 
+def _diff_rust_vs_sparam_one_subj(
+        subj, sparam_dirs, param, sparam_diff_dir=params.SPARAM_DIFF_DIR):
+    """Compare spectral parameterization output from rust to that from FOOOF
+    for one subject."""
+    # Extract data from fif files
+    arrs = []
+    for sparam_dir in sparam_dirs:
+        # Load data
+        fname = f'{sparam_dir}/{subj}_{param}_epo.fif'
+        data = mne.read_epochs(fname, verbose=False).get_data()
+        print(subj, sparam_dir, data.shape)
+        arrs.append(data)
+
+    # Compute difference
+    diff = np.subtract(arrs[0], arrs[1])
+
+    # Save difference
+    os.makedirs(sparam_diff_dir, exist_ok=True)
+    fname = f'{sparam_diff_dir}/{subj}_{param}_diff.npy'
+    np.save(fname, diff)
+    return
+
+
 def diff_rust_vs_sparam_one_param(param, sparam_dir=params.SPARAM_DIR):
-    """Compare spectral parameterization output from rust to that from FOOOF."""
+    """Compare spectral parameterization output from rust to that from FOOOF
+    for one parameter."""
     # Determine
     sparam_dirs = [sparam_dir, sparam_dir + '_fooof']
 
     # Get subject list
     subjects = [[f for f in os.listdir(
         d) if '.fif' not in f] for d in sparam_dirs]
-    print(subjects)
+    subjects = [s for s in subjects[0] if s in subjects[1]]
+
+    # Loop through subjects
+    for subject in subjects:
+        _diff_rust_vs_sparam_one_subj(subject, sparam_dirs, param)
     return
 
 

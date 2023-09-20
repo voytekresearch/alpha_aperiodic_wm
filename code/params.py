@@ -8,6 +8,7 @@ DOWNLOAD_DIR = f'{DATA_DIR}/by_experiment'
 PROCESSED_DIR = f'{DATA_DIR}/by_subject'
 TOTAL_POWER_DIR = f'{DATA_DIR}/total_power'
 SPARAM_DIR = f'{DATA_DIR}/sparam'
+SPARAM_DIFF_DIR = f'{DATA_DIR}/sparam_diff'
 IEM_OUTPUT_DIR = f'{DATA_DIR}/iem_output'
 FIG_DIR = 'figs'
 
