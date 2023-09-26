@@ -98,6 +98,7 @@ N_BLOCK_ITERS = 10
 ALPHA_BAND = (8, 12)  # Hz
 
 # Spectral estimation parameters
+SPARAM_METHOD = 'fooof'
 FMIN = 2  # Hz
 FMAX = 50  # Hz
 N_FREQS = 128

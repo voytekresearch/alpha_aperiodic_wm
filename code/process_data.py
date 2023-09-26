@@ -8,6 +8,7 @@ import mne
 import ray
 import numpy as np
 import specparam
+import fooof
 from fooof.analysis import get_band_peak_fm
 from fooof.utils import trim_spectrum
 import pandas as pd
@@ -56,7 +57,7 @@ def run_decomp_and_sparam_one_trial(
         n_freqs=params.N_FREQS,time_window_len=params.TIME_WINDOW_LEN,
         decim_factor=params.DECIM_FACTOR, n_peaks=params.N_PEAKS,
         peak_width_lims=params.PEAK_WIDTH_LIMS, freq_band=params.ALPHA_BAND,
-        verbose=True):
+        sparam_method=params.SPARAM_METHOD, verbose=True):
     """
     For one trial of data, run spectral decomposition and spectral
     parameterization.
@@ -111,8 +112,14 @@ def run_decomp_and_sparam_one_trial(
     start = time.time()
 
     # Initialize SpecParam model
-    sp = specparam.SpecParam(
-        max_n_peaks=n_peaks, peak_width_limits=peak_width_lims, verbose=False)
+    if sparam_method == 'fooof':
+        sp = fooof.FOOOF(
+            max_n_peaks=n_peaks, peak_width_limits=peak_width_lims,
+            verbose=False)
+    else:
+        sp = specparam.SpecParam(
+            max_n_peaks=n_peaks, peak_width_limits=peak_width_lims,
+            verbose=False)
 
     # Initialize list of fitted models and area parameters
     n_channels, n_timepts, n_freqs = tfr_arr.shape
