@@ -136,14 +136,24 @@ def run_decomp_and_sparam_one_trial(
 
     # Fit spectral parameterization model for one channel and timepoint
     for i, psd in enumerate(tfr_arr.reshape(-1, n_freqs)):
-        fit_model = sp.fit(freqs, psd)
+        if sparam_method == 'fooof':
+            sp.fit(freqs, psd)
+            if not sp.has_model:
+                continue
+            fit_model = sp
+            powers_log = fit_model.power_spectrum
+            powers_log_fit = fit_model.fooofed_spectrum_
+        else:
+            fit_model = sp.fit(freqs, psd)
+            powers_log = fit_model.powers_log
+            powers_log_fit = fit_model.powers_log_fit
 
         # Determine all areas to extract
         area_params_dct['logOscAUC'] = fit_model._spectrum_flat
-        area_params_dct['logTotAUC'] = fit_model.powers_log
-        area_params_dct['linOscAUC'] = 10 ** fit_model.powers_log - \
+        area_params_dct['logTotAUC'] = powers_log
+        area_params_dct['linOscAUC'] = 10 ** powers_log - \
             10 ** fit_model._ap_fit
-        area_params_dct['linTotAUC'] = 10 ** fit_model.powers_log
+        area_params_dct['linTotAUC'] = 10 ** powers_log
         area_params_one_psd = {}
         for param, spectra in area_params_dct.items():
             for tag, band in bands.items():
@@ -157,9 +167,8 @@ def run_decomp_and_sparam_one_trial(
 
         # Extract aperiodic and model fit parameters from model
         aperiodic_params[i] = fit_model.aperiodic_params_
-        r_squared[i] = np.corrcoef(
-            fit_model.powers_log, fit_model.powers_log_fit)[0][1] ** 2
-        mse[i] = ((fit_model.powers_log - fit_model.powers_log_fit) ** 2).mean()
+        r_squared[i] = np.corrcoef(powers_log, powers_log_fit)[0][1] ** 2
+        mse[i] = ((powers_log - powers_log_fit) ** 2).mean()
 
         # Select only peak parameters with peak frequency in desired frequency
         # band
