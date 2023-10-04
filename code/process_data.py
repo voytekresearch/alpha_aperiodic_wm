@@ -52,12 +52,12 @@ def compute_total_power(epochs, save_fname, alpha_band=params.ALPHA_BAND):
 
 
 @ray.remote
-def run_decomp_and_sparam_one_trial(
+def run_decomp_and_sparam_one_trial_fooof(
         epochs, trial_num, alpha_cf, fmin=params.FMIN, fmax=params.FMAX,
         n_freqs=params.N_FREQS,time_window_len=params.TIME_WINDOW_LEN,
         decim_factor=params.DECIM_FACTOR, n_peaks=params.N_PEAKS,
         peak_width_lims=params.PEAK_WIDTH_LIMS, freq_band=params.ALPHA_BAND,
-        sparam_method=params.SPARAM_METHOD, verbose=True):
+        verbose=True):
     """
     For one trial of data, run spectral decomposition and spectral
     parameterization.
@@ -112,14 +112,8 @@ def run_decomp_and_sparam_one_trial(
     start = time.time()
 
     # Initialize SpecParam model
-    if sparam_method == 'fooof':
-        sp = fooof.FOOOF(
-            max_n_peaks=n_peaks, peak_width_limits=peak_width_lims,
-            verbose=False)
-    else:
-        sp = specparam.SpecParam(
-            max_n_peaks=n_peaks, peak_width_limits=peak_width_lims,
-            verbose=False)
+    fm = fooof.FOOOF(
+        max_n_peaks=n_peaks, peak_width_limits=peak_width_lims, verbose=False)
 
     # Initialize list of fitted models and area parameters
     n_channels, n_timepts, n_freqs = tfr_arr.shape
@@ -136,24 +130,149 @@ def run_decomp_and_sparam_one_trial(
 
     # Fit spectral parameterization model for one channel and timepoint
     for i, psd in enumerate(tfr_arr.reshape(-1, n_freqs)):
-        if sparam_method == 'fooof':
-            sp.fit(freqs, psd)
-            if not sp.has_model:
-                continue
-            fit_model = sp
-            powers_log = fit_model.power_spectrum
-            powers_log_fit = fit_model.fooofed_spectrum_
-        else:
-            fit_model = sp.fit(freqs, psd)
-            powers_log = fit_model.powers_log
-            powers_log_fit = fit_model.powers_log_fit
+        # Fit model, skip if failed fit
+        fm.fit(freqs, psd)
+        if not fm.has_model:
+            continue
+
+        # Determine all areas to extract
+        area_params_dct['logOscAUC'] = fm._spectrum_flat
+        area_params_dct['logTotAUC'] = fm.power_spectrum
+        area_params_dct['linOscAUC'] = 10 ** fm.power_spectrum - \
+            10 ** fm._ap_fit
+        area_params_dct['linTotAUC'] = 10 ** fm.power_spectrum
+        area_params_one_psd = {}
+        for param, spectra in area_params_dct.items():
+            for tag, band in bands.items():
+                freqs_trim, psd_trim = trim_spectrum(freqs, spectra, band)
+                area_params_one_psd[f'{param}{tag}'] = np.trapz(
+                    psd_trim, freqs_trim)
+
+        # Add values to area parameters array
+        area_params[i] = np.array([area_params_one_psd[k] for k in sorted(
+            area_params_one_psd.keys())])
+
+        # Extract aperiodic and model fit parameters from model
+        aperiodic_params[i] = fm.aperiodic_params_
+        r_squared[i] = np.corrcoef(
+            fm.power_spectrum, fm.fooofed_spectrum_)[0][1] ** 2
+        mse[i] = ((fm.power_spectrum - fm.fooofed_spectrum_) ** 2).mean()
+
+        # Select only peak parameters with peak frequency in desired frequency
+        # band
+        peak_params[i] = get_band_peak_fm(fm, freq_band)
+
+    # Put all parameters together
+    model_params = np.hstack((
+        aperiodic_params, peak_params, r_squared, mse, area_params))
+
+    # Create DataFrame for trial
+    index_shape = (1, n_channels, n_timepts)
+    index_names = ['trial', 'channel', 'timepoint']
+    index = pd.MultiIndex.from_product([
+        range(s) for s in index_shape], names=index_names)
+    column_names = ['offset', 'exponent', 'CF', 'PW', 'BW', 'R^2', 'MSE']
+    column_names += sorted(
+        [par + tag for par in area_params_dct.keys() for tag in bands.keys()])
+    sparam_df_one_trial = pd.DataFrame(
+        model_params, columns=column_names, index=index).reset_index()
+    sparam_df_one_trial.loc[:, 'trial'] = trial_num
+
+    # Print runtime for spectral parameterization
+    if verbose:
+        print(f'Finished spectral parameterization for trial #{trial_num} in '
+              f'{time.time() - start:.1f} seconds')
+    return trial_num, sparam_df_one_trial
+
+
+@ray.remote
+def run_decomp_and_sparam_one_trial_rust(
+        epochs, trial_num, alpha_cf, fmin=params.FMIN, fmax=params.FMAX,
+        n_freqs=params.N_FREQS,time_window_len=params.TIME_WINDOW_LEN,
+        decim_factor=params.DECIM_FACTOR, n_peaks=params.N_PEAKS,
+        peak_width_lims=params.PEAK_WIDTH_LIMS, freq_band=params.ALPHA_BAND,
+        verbose=True):
+    """
+    For one trial of data, run spectral decomposition and spectral
+    parameterization.
+
+    Parameters:
+    -----------
+    epochs : mne.Epochs
+        Epochs object to run spectral decomposition and spectral
+        parameterization.
+    trial_num : int
+        Trial number to run spectral decomposition and spectral
+        parameterization for.
+    fmin : float (default: params.FMIN)
+        Minimum frequency to use for spectral decomposition.
+    fmax : float (default: params.FMAX)
+        Maximum frequency to use for spectral decomposition.
+    n_freqs : int (default: params.N_FREQS)
+        Number of frequencies to use for spectral decomposition.
+    time_window_len : float (default: params.TIME_WINDOW_LEN)
+        Length of time window to use for spectral decomposition.
+    decim_factor : int (default: params.DECIM_FACTOR)
+        Decimation factor to use for spectral decomposition.
+    n_peaks : int (default: params.N_PEAKS)
+        Maximum number of peaks to use for spectral parameterization.
+    peak_width_lims : tuple (default: params.PEAK_WIDTH_LIMS)
+        Peak width limits to use for spectral parameterization.
+    freq_band : tuple (default: params.ALPHA_BAND)
+        Frequency band to extract peaks from spectral parameterization.
+    verbose : bool (default: True)
+        Whether to print runtime information.
+    """
+    # Make frequencies linearly spaced
+    freqs = np.linspace(fmin, fmax, n_freqs)
+
+    # Make time window length consistent across frequencies
+    n_cycles = freqs * time_window_len
+
+    # Get current trial of data
+    trial = epochs.copy().drop(
+        [i for i in range(epochs.get_data().shape[0]) if i != trial_num],
+        verbose=False)
+
+    # Use multitapers to estimate spectrogram
+    trial_tfr = mne.time_frequency.tfr_multitaper(
+        trial, freqs, n_cycles, return_itc=False, picks='eeg', average=False,
+        decim=decim_factor, verbose=False)
+
+    # Reshape spectrogram to be (n_channels, n_timepts, n_freqs)
+    tfr_arr = np.squeeze(np.swapaxes(trial_tfr.data, 2, 3))
+
+    # Start timer for spectral parameterization
+    start = time.time()
+
+    # Initialize SpecParam model
+    sp = specparam.SpecParam(
+        max_n_peaks=n_peaks, peak_width_limits=peak_width_lims, verbose=False)
+
+    # Initialize list of fitted models and area parameters
+    n_channels, n_timepts, n_freqs = tfr_arr.shape
+    bands = {'': freq_band, 'SubjCF': alpha_cf + np.array([-2, 2])}
+    area_params_dct = {
+        'logOscAUC': None, 'logTotAUC': None, 'linOscAUC': None,
+        'linTotAUC': None}
+    aperiodic_params = np.zeros((n_channels * n_timepts, 2))
+    r_squared = np.zeros((n_channels * n_timepts, 1))
+    mse = np.zeros((n_channels * n_timepts, 1))
+    peak_params = np.zeros((n_channels * n_timepts, 3))
+    area_params = np.zeros((
+        n_channels * n_timepts, len(bands) * len(area_params_dct)))
+
+    # Fit spectral parameterization model for one channel and timepoint
+    for i, psd in enumerate(tfr_arr.reshape(-1, n_freqs)):
+        # Fit model
+        fit_model = sp.fit(freqs, psd)
 
         # Determine all areas to extract
         area_params_dct['logOscAUC'] = fit_model._spectrum_flat
-        area_params_dct['logTotAUC'] = powers_log
-        area_params_dct['linOscAUC'] = 10 ** powers_log - \
+        area_params_dct['logTotAUC'] = fit_model.powers_log
+        area_params_dct['linOscAUC'] = 10 ** fit_model.powers_log - \
             10 ** fit_model._ap_fit
-        area_params_dct['linTotAUC'] = 10 ** powers_log
+        area_params_dct['linTotAUC'] = 10 ** fit_model.powers_log
         area_params_one_psd = {}
         for param, spectra in area_params_dct.items():
             for tag, band in bands.items():
@@ -167,8 +286,9 @@ def run_decomp_and_sparam_one_trial(
 
         # Extract aperiodic and model fit parameters from model
         aperiodic_params[i] = fit_model.aperiodic_params_
-        r_squared[i] = np.corrcoef(powers_log, powers_log_fit)[0][1] ** 2
-        mse[i] = ((powers_log - powers_log_fit) ** 2).mean()
+        r_squared[i] = np.corrcoef(
+            fit_model.powers_log, fit_model.powers_log_fit)[0][1] ** 2
+        mse[i] = ((fit_model.powers_log - fit_model.powers_log_fit) ** 2).mean()
 
         # Select only peak parameters with peak frequency in desired frequency
         # band
@@ -200,7 +320,8 @@ def run_decomp_and_sparam_one_trial(
 def run_decomp_and_sparam_all_trials(
         epochs, save_dir, fmin=params.FMIN, fmax=params.FMAX,
         n_peaks=params.N_PEAKS, peak_width_lims=params.PEAK_WIDTH_LIMS,
-        freq_band=params.ALPHA_BAND, verbose=True):
+        freq_band=params.ALPHA_BAND, sparam_method=params.SPARAM_METHOD,
+        verbose=True):
     """For each trial of data, run spectral decomposition and spectral
     parameterization using ray for parallelization.
 
@@ -252,8 +373,17 @@ def run_decomp_and_sparam_all_trials(
         epochs_id = ray.put(epochs)
 
         # Fit spectral parameterization model for one trial
-        result_ids = [run_decomp_and_sparam_one_trial.remote(
-            epochs_id, trial_num, alpha_cf) for trial_num in trials_to_process]
+        if sparam_method == 'fooof':
+            run_one_trial = run_decomp_and_sparam_one_trial_fooof
+        elif sparam_method == 'rust':
+            run_one_trial = run_decomp_and_sparam_one_trial_rust
+        else:
+            error_msg = f'Specified method {sparam_method} not implemented'
+            raise NotImplementedError(error_msg)
+
+        result_ids = [run_one_trial.remote(
+            epochs_id, trial_num, alpha_cf, sparam_method) for \
+                trial_num in trials_to_process]
 
         # Save trial data as processed
         while result_ids:
