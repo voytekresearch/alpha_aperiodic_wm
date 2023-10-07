@@ -1,5 +1,4 @@
 """Process MNE Epochs data for each subject."""
-
 # Import necessary modules
 import os
 import sys
@@ -7,12 +6,13 @@ import time
 import mne
 import ray
 import numpy as np
-import specparam
+# import specparam
 import fooof
-from fooof.analysis import get_band_peak_fm
+from fooof.analysis import get_band_peak_fm, get_band_peak_fg
 from fooof.utils import trim_spectrum
 import pandas as pd
 import params
+import warnings
 
 
 def compute_total_power(epochs, save_fname, alpha_band=params.ALPHA_BAND):
@@ -89,6 +89,9 @@ def run_decomp_and_sparam_one_trial_fooof(
     verbose : bool (default: True)
         Whether to print runtime information.
     """
+    print(trial_num, alpha_cf)
+    if trial_num > 50:
+        raise ValueError('test')
     # Make frequencies linearly spaced
     freqs = np.linspace(fmin, fmax, n_freqs)
 
@@ -111,9 +114,26 @@ def run_decomp_and_sparam_one_trial_fooof(
     # Start timer for spectral parameterization
     start = time.time()
 
-    # Initialize SpecParam model
-    fm = fooof.FOOOF(
+    # Initialize FOOOFGroup
+    fooof_grp = fooof.FOOOFGroup(
         max_n_peaks=n_peaks, peak_width_limits=peak_width_lims, verbose=False)
+
+    with warnings.catch_warnings():
+        # Ignore warnings for bad fits
+        warnings.simplefilter('ignore')
+
+        # Fit spectral parameterization model
+        fooof_grp.fit(
+            freqs, tfr_arr.reshape(-1, len(freqs)), freq_range=(fmin, fmax))
+
+        # Extract aperiodic and model fit parameters from model
+        aperiodic_params = fooof_grp.get_params('aperiodic_params')
+        r_squared = fooof_grp.get_params('r_squared')
+        error = fooof_grp.get_params('error')
+
+        # Select only peak parameters with peak frequency in desired frequency
+        # band
+        peak_params = get_band_peak_fg(fooof_grp, freq_band)
 
     # Initialize list of fitted models and area parameters
     n_channels, n_timepts, n_freqs = tfr_arr.shape
@@ -121,22 +141,18 @@ def run_decomp_and_sparam_one_trial_fooof(
     area_params_dct = {
         'logOscAUC': None, 'logTotAUC': None, 'linOscAUC': None,
         'linTotAUC': None}
-    aperiodic_params = np.zeros((n_channels * n_timepts, 2))
-    r_squared = np.zeros((n_channels * n_timepts, 1))
-    mse = np.zeros((n_channels * n_timepts, 1))
-    peak_params = np.zeros((n_channels * n_timepts, 3))
     area_params = np.zeros((
         n_channels * n_timepts, len(bands) * len(area_params_dct)))
 
     # Fit spectral parameterization model for one channel and timepoint
-    for i, psd in enumerate(tfr_arr.reshape(-1, n_freqs)):
-        # Fit model, skip if failed fit
-        fm.fit(freqs, psd)
-        if not fm.has_model:
+    for i in range(len(fooof_grp.group_results)):
+        # Regenerate FOOOF model
+        fm = fooof_grp.get_fooof(i)
+        if not fm.has_model or not fm.has_data:
+            print(0, fm.has_model, fm.has_data)
             continue
-
         # Determine all areas to extract
-        area_params_dct['logOscAUC'] = fm._spectrum_flat
+        area_params_dct['logOscAUC'] = fm.power_spectrum - fm._ap_fit
         area_params_dct['logTotAUC'] = fm.power_spectrum
         area_params_dct['linOscAUC'] = 10 ** fm.power_spectrum - \
             10 ** fm._ap_fit
@@ -152,19 +168,10 @@ def run_decomp_and_sparam_one_trial_fooof(
         area_params[i] = np.array([area_params_one_psd[k] for k in sorted(
             area_params_one_psd.keys())])
 
-        # Extract aperiodic and model fit parameters from model
-        aperiodic_params[i] = fm.aperiodic_params_
-        r_squared[i] = np.corrcoef(
-            fm.power_spectrum, fm.fooofed_spectrum_)[0][1] ** 2
-        mse[i] = ((fm.power_spectrum - fm.fooofed_spectrum_) ** 2).mean()
-
-        # Select only peak parameters with peak frequency in desired frequency
-        # band
-        peak_params[i] = get_band_peak_fm(fm, freq_band)
-
     # Put all parameters together
     model_params = np.hstack((
-        aperiodic_params, peak_params, r_squared, mse, area_params))
+        aperiodic_params, peak_params, r_squared[:, np.newaxis],
+        error[:, np.newaxis], area_params))
 
     # Create DataFrame for trial
     index_shape = (1, n_channels, n_timepts)
@@ -185,136 +192,136 @@ def run_decomp_and_sparam_one_trial_fooof(
     return trial_num, sparam_df_one_trial
 
 
-@ray.remote
-def run_decomp_and_sparam_one_trial_rust(
-        epochs, trial_num, alpha_cf, fmin=params.FMIN, fmax=params.FMAX,
-        n_freqs=params.N_FREQS,time_window_len=params.TIME_WINDOW_LEN,
-        decim_factor=params.DECIM_FACTOR, n_peaks=params.N_PEAKS,
-        peak_width_lims=params.PEAK_WIDTH_LIMS, freq_band=params.ALPHA_BAND,
-        verbose=True):
-    """
-    For one trial of data, run spectral decomposition and spectral
-    parameterization.
+# @ray.remote
+# def run_decomp_and_sparam_one_trial_rust(
+#         epochs, trial_num, alpha_cf, fmin=params.FMIN, fmax=params.FMAX,
+#         n_freqs=params.N_FREQS,time_window_len=params.TIME_WINDOW_LEN,
+#         decim_factor=params.DECIM_FACTOR, n_peaks=params.N_PEAKS,
+#         peak_width_lims=params.PEAK_WIDTH_LIMS, freq_band=params.ALPHA_BAND,
+#         verbose=True):
+#     """
+#     For one trial of data, run spectral decomposition and spectral
+#     parameterization.
 
-    Parameters:
-    -----------
-    epochs : mne.Epochs
-        Epochs object to run spectral decomposition and spectral
-        parameterization.
-    trial_num : int
-        Trial number to run spectral decomposition and spectral
-        parameterization for.
-    fmin : float (default: params.FMIN)
-        Minimum frequency to use for spectral decomposition.
-    fmax : float (default: params.FMAX)
-        Maximum frequency to use for spectral decomposition.
-    n_freqs : int (default: params.N_FREQS)
-        Number of frequencies to use for spectral decomposition.
-    time_window_len : float (default: params.TIME_WINDOW_LEN)
-        Length of time window to use for spectral decomposition.
-    decim_factor : int (default: params.DECIM_FACTOR)
-        Decimation factor to use for spectral decomposition.
-    n_peaks : int (default: params.N_PEAKS)
-        Maximum number of peaks to use for spectral parameterization.
-    peak_width_lims : tuple (default: params.PEAK_WIDTH_LIMS)
-        Peak width limits to use for spectral parameterization.
-    freq_band : tuple (default: params.ALPHA_BAND)
-        Frequency band to extract peaks from spectral parameterization.
-    verbose : bool (default: True)
-        Whether to print runtime information.
-    """
-    # Make frequencies linearly spaced
-    freqs = np.linspace(fmin, fmax, n_freqs)
+#     Parameters:
+#     -----------
+#     epochs : mne.Epochs
+#         Epochs object to run spectral decomposition and spectral
+#         parameterization.
+#     trial_num : int
+#         Trial number to run spectral decomposition and spectral
+#         parameterization for.
+#     fmin : float (default: params.FMIN)
+#         Minimum frequency to use for spectral decomposition.
+#     fmax : float (default: params.FMAX)
+#         Maximum frequency to use for spectral decomposition.
+#     n_freqs : int (default: params.N_FREQS)
+#         Number of frequencies to use for spectral decomposition.
+#     time_window_len : float (default: params.TIME_WINDOW_LEN)
+#         Length of time window to use for spectral decomposition.
+#     decim_factor : int (default: params.DECIM_FACTOR)
+#         Decimation factor to use for spectral decomposition.
+#     n_peaks : int (default: params.N_PEAKS)
+#         Maximum number of peaks to use for spectral parameterization.
+#     peak_width_lims : tuple (default: params.PEAK_WIDTH_LIMS)
+#         Peak width limits to use for spectral parameterization.
+#     freq_band : tuple (default: params.ALPHA_BAND)
+#         Frequency band to extract peaks from spectral parameterization.
+#     verbose : bool (default: True)
+#         Whether to print runtime information.
+#     """
+#     # Make frequencies linearly spaced
+#     freqs = np.linspace(fmin, fmax, n_freqs)
 
-    # Make time window length consistent across frequencies
-    n_cycles = freqs * time_window_len
+#     # Make time window length consistent across frequencies
+#     n_cycles = freqs * time_window_len
 
-    # Get current trial of data
-    trial = epochs.copy().drop(
-        [i for i in range(epochs.get_data().shape[0]) if i != trial_num],
-        verbose=False)
+#     # Get current trial of data
+#     trial = epochs.copy().drop(
+#         [i for i in range(epochs.get_data().shape[0]) if i != trial_num],
+#         verbose=False)
 
-    # Use multitapers to estimate spectrogram
-    trial_tfr = mne.time_frequency.tfr_multitaper(
-        trial, freqs, n_cycles, return_itc=False, picks='eeg', average=False,
-        decim=decim_factor, verbose=False)
+#     # Use multitapers to estimate spectrogram
+#     trial_tfr = mne.time_frequency.tfr_multitaper(
+#         trial, freqs, n_cycles, return_itc=False, picks='eeg', average=False,
+#         decim=decim_factor, verbose=False)
 
-    # Reshape spectrogram to be (n_channels, n_timepts, n_freqs)
-    tfr_arr = np.squeeze(np.swapaxes(trial_tfr.data, 2, 3))
+#     # Reshape spectrogram to be (n_channels, n_timepts, n_freqs)
+#     tfr_arr = np.squeeze(np.swapaxes(trial_tfr.data, 2, 3))
 
-    # Start timer for spectral parameterization
-    start = time.time()
+#     # Start timer for spectral parameterization
+#     start = time.time()
 
-    # Initialize SpecParam model
-    sp = specparam.SpecParam(
-        max_n_peaks=n_peaks, peak_width_limits=peak_width_lims, verbose=False)
+#     # Initialize SpecParam model
+#     sp = specparam.SpecParam(
+#         max_n_peaks=n_peaks, peak_width_limits=peak_width_lims, verbose=False)
 
-    # Initialize list of fitted models and area parameters
-    n_channels, n_timepts, n_freqs = tfr_arr.shape
-    bands = {'': freq_band, 'SubjCF': alpha_cf + np.array([-2, 2])}
-    area_params_dct = {
-        'logOscAUC': None, 'logTotAUC': None, 'linOscAUC': None,
-        'linTotAUC': None}
-    aperiodic_params = np.zeros((n_channels * n_timepts, 2))
-    r_squared = np.zeros((n_channels * n_timepts, 1))
-    mse = np.zeros((n_channels * n_timepts, 1))
-    peak_params = np.zeros((n_channels * n_timepts, 3))
-    area_params = np.zeros((
-        n_channels * n_timepts, len(bands) * len(area_params_dct)))
+#     # Initialize list of fitted models and area parameters
+#     n_channels, n_timepts, n_freqs = tfr_arr.shape
+#     bands = {'': freq_band, 'SubjCF': alpha_cf + np.array([-2, 2])}
+#     area_params_dct = {
+#         'logOscAUC': None, 'logTotAUC': None, 'linOscAUC': None,
+#         'linTotAUC': None}
+#     aperiodic_params = np.zeros((n_channels * n_timepts, 2))
+#     r_squared = np.zeros((n_channels * n_timepts, 1))
+#     mse = np.zeros((n_channels * n_timepts, 1))
+#     peak_params = np.zeros((n_channels * n_timepts, 3))
+#     area_params = np.zeros((
+#         n_channels * n_timepts, len(bands) * len(area_params_dct)))
 
-    # Fit spectral parameterization model for one channel and timepoint
-    for i, psd in enumerate(tfr_arr.reshape(-1, n_freqs)):
-        # Fit model
-        fit_model = sp.fit(freqs, psd)
+#     # Fit spectral parameterization model for one channel and timepoint
+#     for i, psd in enumerate(tfr_arr.reshape(-1, n_freqs)):
+#         # Fit model
+#         fit_model = sp.fit(freqs, psd)
 
-        # Determine all areas to extract
-        area_params_dct['logOscAUC'] = fit_model._spectrum_flat
-        area_params_dct['logTotAUC'] = fit_model.powers_log
-        area_params_dct['linOscAUC'] = 10 ** fit_model.powers_log - \
-            10 ** fit_model._ap_fit
-        area_params_dct['linTotAUC'] = 10 ** fit_model.powers_log
-        area_params_one_psd = {}
-        for param, spectra in area_params_dct.items():
-            for tag, band in bands.items():
-                freqs_trim, psd_trim = trim_spectrum(freqs, spectra, band)
-                area_params_one_psd[f'{param}{tag}'] = np.trapz(
-                    psd_trim, freqs_trim)
+#         # Determine all areas to extract
+#         area_params_dct['logOscAUC'] = fit_model._spectrum_flat
+#         area_params_dct['logTotAUC'] = fit_model.powers_log
+#         area_params_dct['linOscAUC'] = 10 ** fit_model.powers_log - \
+#             10 ** fit_model._ap_fit
+#         area_params_dct['linTotAUC'] = 10 ** fit_model.powers_log
+#         area_params_one_psd = {}
+#         for param, spectra in area_params_dct.items():
+#             for tag, band in bands.items():
+#                 freqs_trim, psd_trim = trim_spectrum(freqs, spectra, band)
+#                 area_params_one_psd[f'{param}{tag}'] = np.trapz(
+#                     psd_trim, freqs_trim)
 
-        # Add values to area parameters array
-        area_params[i] = np.array([area_params_one_psd[k] for k in sorted(
-            area_params_one_psd.keys())])
+#         # Add values to area parameters array
+#         area_params[i] = np.array([area_params_one_psd[k] for k in sorted(
+#             area_params_one_psd.keys())])
 
-        # Extract aperiodic and model fit parameters from model
-        aperiodic_params[i] = fit_model.aperiodic_params_
-        r_squared[i] = np.corrcoef(
-            fit_model.powers_log, fit_model.powers_log_fit)[0][1] ** 2
-        mse[i] = ((fit_model.powers_log - fit_model.powers_log_fit) ** 2).mean()
+#         # Extract aperiodic and model fit parameters from model
+#         aperiodic_params[i] = fit_model.aperiodic_params_
+#         r_squared[i] = np.corrcoef(
+#             fit_model.powers_log, fit_model.powers_log_fit)[0][1] ** 2
+#         mse[i] = ((fit_model.powers_log - fit_model.powers_log_fit) ** 2).mean()
 
-        # Select only peak parameters with peak frequency in desired frequency
-        # band
-        peak_params[i] = get_band_peak_fm(fit_model, freq_band)
+#         # Select only peak parameters with peak frequency in desired frequency
+#         # band
+#         peak_params[i] = get_band_peak_fm(fit_model, freq_band)
 
-    # Put all parameters together
-    model_params = np.hstack((
-        aperiodic_params, peak_params, r_squared, mse, area_params))
+#     # Put all parameters together
+#     model_params = np.hstack((
+#         aperiodic_params, peak_params, r_squared, mse, area_params))
 
-    # Create DataFrame for trial
-    index_shape = (1, n_channels, n_timepts)
-    index_names = ['trial', 'channel', 'timepoint']
-    index = pd.MultiIndex.from_product([
-        range(s) for s in index_shape], names=index_names)
-    column_names = ['offset', 'exponent', 'CF', 'PW', 'BW', 'R^2', 'MSE']
-    column_names += sorted(
-        [par + tag for par in area_params_dct.keys() for tag in bands.keys()])
-    sparam_df_one_trial = pd.DataFrame(
-        model_params, columns=column_names, index=index).reset_index()
-    sparam_df_one_trial.loc[:, 'trial'] = trial_num
+#     # Create DataFrame for trial
+#     index_shape = (1, n_channels, n_timepts)
+#     index_names = ['trial', 'channel', 'timepoint']
+#     index = pd.MultiIndex.from_product([
+#         range(s) for s in index_shape], names=index_names)
+#     column_names = ['offset', 'exponent', 'CF', 'PW', 'BW', 'R^2', 'MSE']
+#     column_names += sorted(
+#         [par + tag for par in area_params_dct.keys() for tag in bands.keys()])
+#     sparam_df_one_trial = pd.DataFrame(
+#         model_params, columns=column_names, index=index).reset_index()
+#     sparam_df_one_trial.loc[:, 'trial'] = trial_num
 
-    # Print runtime for spectral parameterization
-    if verbose:
-        print(f'Finished spectral parameterization for trial #{trial_num} in '
-              f'{time.time() - start:.1f} seconds')
-    return trial_num, sparam_df_one_trial
+#     # Print runtime for spectral parameterization
+#     if verbose:
+#         print(f'Finished spectral parameterization for trial #{trial_num} in '
+#               f'{time.time() - start:.1f} seconds')
+#     return trial_num, sparam_df_one_trial
 
 
 def run_decomp_and_sparam_all_trials(
@@ -360,30 +367,28 @@ def run_decomp_and_sparam_all_trials(
         psds, freqs = mne.time_frequency.psd_array_multitaper(
             epochs.get_data(picks='eeg'), epochs.info['sfreq'], fmin=fmin,
             fmax=fmax, n_jobs=-1, verbose=False)
-        psd = np.mean(psds, axis=(0, 1))
-        sp = specparam.SpecParam(
+        fg = fooof.FOOOFGroup(
             max_n_peaks=n_peaks, peak_width_limits=peak_width_lims,
             verbose=False)
-        fit_model = sp.fit(freqs, psd)
-        alpha_cf = get_band_peak_fm(fit_model, freq_band)[0]
+        fg.fit(freqs, psds.reshape(-1, len(freqs)), freq_range=(fmin, fmax))
+        alpha_cf = np.nanmean(get_band_peak_fg(fg, freq_band), axis=0)[0]
 
         # Iterate through each trial of data
-        ray.init(
-            runtime_env={"py_modules": [specparam]})
+        ray.init()
+            # runtime_env={"py_modules": [specparam]})
         epochs_id = ray.put(epochs)
 
         # Fit spectral parameterization model for one trial
         if sparam_method == 'fooof':
             run_one_trial = run_decomp_and_sparam_one_trial_fooof
-        elif sparam_method == 'rust':
-            run_one_trial = run_decomp_and_sparam_one_trial_rust
+        # elif sparam_method == 'rust':
+        #     run_one_trial = run_decomp_and_sparam_one_trial_rust
         else:
             error_msg = f'Specified method {sparam_method} not implemented'
             raise NotImplementedError(error_msg)
 
         result_ids = [run_one_trial.remote(
-            epochs_id, trial_num, alpha_cf, sparam_method) for \
-                trial_num in trials_to_process]
+            epochs_id, trial_num, alpha_cf) for trial_num in trials_to_process]
 
         # Save trial data as processed
         while result_ids:
