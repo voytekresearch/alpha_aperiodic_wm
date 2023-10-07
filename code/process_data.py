@@ -89,9 +89,6 @@ def run_decomp_and_sparam_one_trial_fooof(
     verbose : bool (default: True)
         Whether to print runtime information.
     """
-    print(trial_num, alpha_cf)
-    if trial_num > 50:
-        raise ValueError('test')
     # Make frequencies linearly spaced
     freqs = np.linspace(fmin, fmax, n_freqs)
 
