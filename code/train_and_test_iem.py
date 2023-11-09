@@ -318,7 +318,7 @@ def plot_ctf_slope(
 
     # Save if desired
     if save_fname:
-        plt.savefig(save_fname)
+        plt.savefig(save_fname, bbox_inches='tight', dpi=300)
     plt.close()
 
 
