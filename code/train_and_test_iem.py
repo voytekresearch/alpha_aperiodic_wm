@@ -259,7 +259,8 @@ def plot_channel_offset(channel_offset_arr, t_arr, save_fname=None):
 
 
 def plot_ctf_slope(
-        ctf_slopes, t_arr, task_timings, palette=None, save_fname=None):
+        ctf_slopes, t_arr, task_num, task_timings, palette=None,
+        save_fname=None):
     """Plot channel tuning function (CTF) across time for multiple
     parameters.
 
@@ -281,9 +282,9 @@ def plot_ctf_slope(
 
     # Make DataFrame of CTF slopes by time for each parameter
     for param, ctf_slopes_one_param in ctf_slopes.items():
+        n = ctf_slopes_one_param.shape[0]
         one_param_df = pd.DataFrame(ctf_slopes_one_param, columns=t_arr)
-        one_param_df[
-            'Parameter'] = f'{param} (n={ctf_slopes_one_param.shape[0]})'
+        one_param_df['Parameter'] = param
         one_param_df = one_param_df.melt(
             id_vars=['Parameter'], var_name='Time (s)', value_name='CTF slope')
         ctf_slopes_dfs.append(one_param_df)
@@ -295,10 +296,20 @@ def plot_ctf_slope(
     plt.figure(figsize=(10, 6))
     sns.lineplot(
         data=ctf_slopes_big_df, hue='Parameter', x='Time (s)', y='CTF slope',
-        palette=palette)
+        palette=palette, legend=False)
+    _, _, _, ymax = plt.axis()
     plt.axvline(0.0, c='gray', ls='--')
+    plt.text(0.03, ymax, 'Stimulus onset', va='bottom', ha='right', size=16)
     plt.axvline(task_timings[0], c='gray', ls='--')
+    plt.text(
+        task_timings[0] - 0.03, ymax, 'Stimulus offset', va='bottom', ha='left',
+        size=16)
     plt.axvline(task_timings[1], c='gray', ls='--')
+    plt.text(
+        task_timings[1], ymax, 'Free response', va='bottom', ha='center',
+        size=16)
+    plt.title(
+        f'Task {task_num} (n = {n})', size=28, y=1.08, fontweight='bold')
     plt.xlabel('Time (s)', size=20)
     plt.ylabel('CTF slope', size=20)
     plt.xticks(size=12)

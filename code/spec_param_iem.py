@@ -30,6 +30,6 @@ if __name__ == '__main__':
             'Alpha oscillatory power': -pw_ctf_slopes[task_num],
             'Aperiodic exponent': -exp_ctf_slopes[task_num]}
         plot_ctf_slope(
-            ctf_slopes, t_arrays[task_num],
+            ctf_slopes, t_arrays[task_num], task_num,
             task_timings=params.TASK_TIMINGS[task_num], palette='Set1',
             save_fname=ctf_slopes_fname)
