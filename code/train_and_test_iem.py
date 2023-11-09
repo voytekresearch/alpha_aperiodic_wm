@@ -309,7 +309,7 @@ def plot_ctf_slope(
         task_timings[1], ymax, 'Free response', va='bottom', ha='center',
         size=16)
     plt.title(
-        f'Task {task_num} (n = {n})', size=28, y=1.08, fontweight='bold')
+        f'Task {task_num + 1} (n = {n})', size=28, y=1.08, fontweight='bold')
     plt.xlabel('Time (s)', size=20)
     plt.ylabel('CTF slope', size=20)
     plt.xticks(size=12)
