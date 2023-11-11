@@ -9,15 +9,15 @@ from train_and_test_iem import plot_ctf_slope, train_and_test_all_subjs
 
 if __name__ == '__main__':
     # Reproduce total alpha power IEM
-    _, tot_pw_ctf_slopes, _ = train_and_test_all_subjs(
+    _, tot_pw_ctf_slopes, tot_pw_ctf_slopes_null, _ = train_and_test_all_subjs(
         'total_power', params.TOTAL_POWER_DIR)
 
     # Decode spatial location from alpha oscillatory power
-    _, pw_ctf_slopes, t_arrays = train_and_test_all_subjs(
+    _, pw_ctf_slopes, pw_ctf_slopes_null, t_arrays = train_and_test_all_subjs(
         'PW', params.SPARAM_DIR)
 
     # Decode spatial location from aperiodic exponent
-    _, exp_ctf_slopes, _ = train_and_test_all_subjs(
+    _, exp_ctf_slopes, exp_ctf_slopes_null, _ = train_and_test_all_subjs(
         'exponent', params.SPARAM_DIR)
 
     # Plot CTF slope time courses for parameters from spectral parameterization
@@ -29,7 +29,12 @@ if __name__ == '__main__':
             'Alpha total power': -tot_pw_ctf_slopes[task_num],
             'Alpha oscillatory power': -pw_ctf_slopes[task_num],
             'Aperiodic exponent': -exp_ctf_slopes[task_num]}
+        ctf_slopes_shuffled = {
+            'Alpha total power': -tot_pw_ctf_slopes_null[task_num],
+            'Alpha oscillatory power': -pw_ctf_slopes_null[task_num],
+            'Aperiodic exponent': -exp_ctf_slopes_null[task_num]}
         plot_ctf_slope(
             ctf_slopes, t_arrays[task_num], task_num,
-            task_timings=params.TASK_TIMINGS[task_num], palette='Set1',
+            task_timings=params.TASK_TIMINGS[task_num],
+            ctf_slopes_shuffled=ctf_slopes_shuffled, palette='Set1',
             save_fname=ctf_slopes_fname)
