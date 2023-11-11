@@ -6,6 +6,17 @@ import params
 
 
 def count_psds(sparam_dir=params.SPARAM_DIR, exclude_str=None, verbose=True):
+    """Count number of PSDs in each folder of spectral parameterization data.
+
+    Parameters
+    ----------
+    sparam_dir : str
+        Path to spectral parameterization directory.
+    exclude_str : str
+        Exclude folders containing this string.
+    verbose : bool
+        Print counts if True.
+    """
     # Get folders in spectral parameterization directory
     sub_folders = [name for name in os.listdir(sparam_dir) if os.path.isdir(
         os.path.join(sparam_dir, name))]
