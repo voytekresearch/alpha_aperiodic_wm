@@ -4,8 +4,10 @@ using same inverted encoding model (IEM) and EEG data as Foster and colleagues
 
 # Import neccesary modules
 import os
+import matplotlib.pyplot as plt
 import params
-from train_and_test_iem import plot_ctf_slope, train_and_test_all_subjs
+from train_and_test_iem import plot_ctf_slope, plot_ctf_slope_paired_ttest, \
+    train_and_test_all_subjs
 
 if __name__ == '__main__':
     # Reproduce total alpha power IEM
@@ -38,3 +40,16 @@ if __name__ == '__main__':
             task_timings=params.TASK_TIMINGS[task_num],
             ctf_slopes_shuffled=ctf_slopes_shuffled, palette='Set1',
             save_fname=ctf_slopes_fname)
+
+    # Plot paired t-tests of CTF slopes for parameters from spectral
+    # parameterization model
+    exp_ctf_slope_fname = f'{params.FIG_DIR}/exp_ctf_slope_paired_ttest.png'
+    cmap = plt.get_cmap('Paired')
+    plot_ctf_slope_paired_ttest(
+        exp_ctf_slopes, t_arrays, (0.0, 0.4), palette=(cmap(3), cmap(2)),
+        ctf_slopes_shuffled=exp_ctf_slopes_null, save_fname=exp_ctf_slope_fname)
+    pw_ctf_slope_fname = f'{params.FIG_DIR}/pw_ctf_slope_paired_ttest.png'
+    cmap = plt.get_cmap('Paired')
+    plot_ctf_slope_paired_ttest(
+        pw_ctf_slopes, t_arrays, 'WM', palette=(cmap(1), cmap(0)),
+        ctf_slopes_shuffled=pw_ctf_slopes_null, save_fname=pw_ctf_slope_fname)
