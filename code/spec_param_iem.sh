@@ -1,13 +1,12 @@
 #!/bin/bash
 
-#SBATCH --job-name=spec_param_iem_cluster
+#SBATCH --job-name=spec_param_iem
 #SBATCH --nodes=1
-#SBATCH --time=48:00:00
 #SBATCH --exclusive
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=68
 #SBATCH --mem-per-cpu=2G
-#SBATCH --output=spec_param_iem_cluster.out
+#SBATCH --output=spec_param_iem.out
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=abender@ucsd.edu
 

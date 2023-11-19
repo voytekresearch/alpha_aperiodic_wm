@@ -1,10 +1,10 @@
 #!/bin/bash
 
-#SBATCH --job-name=debug_rust_cluster
+#SBATCH --job-name=debug_rust
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --mem=2GB
-#SBATCH --output=debug_rust_cluster.out
+#SBATCH --output=debug_rust.out
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=abender@ucsd.edu
 
