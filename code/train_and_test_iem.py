@@ -1,13 +1,12 @@
 """Train and test IEM using the same methodology used by Foster and colleagues
 (https://pubmed.ncbi.nlm.nih.gov/26467522/)."""
 
-# Import neccesary modules
+# Import necessary modules
 import os.path
 import time
 import multiprocessing as mp
 import numpy as np
 import pandas as pd
-import pingouin as pg
 import seaborn as sns
 from statannotations.Annotator import Annotator
 import matplotlib.pyplot as plt
@@ -41,11 +40,11 @@ def load_param_data(
     -------
     epochs : mne.Epochs
         Epochs object containing EEG data.
-    times : ndarray
+    times : np.ndarray
         Time course.
     beh_data : dict
         Dictionary containing behavioral data.
-    param_data : ndarray
+    param_data : np.ndarray
         Array containing parameterized data for decoding.
     """
     # Load behavioral data
@@ -78,7 +77,7 @@ def load_param_data(
         param_dir, f'{subj}_{param}_epo.fif'), verbose=False).get_data()
     param_data = param_data[~beh_nan, :, :]
 
-    # Load parameterized data for threhsold parameter
+    # Load parameterized data for threshold parameter
     if threshold_param is not None and threshold_val is not None:
         thresh_fname = os.path.join(
             param_dir, f'{subj}_{threshold_param}_epo.fif')
@@ -99,18 +98,18 @@ def average_param_data_within_trial_blocks(
     ----------
     epochs : mne.Epochs
         Epochs object containing EEG data.
-    times : ndarray
+    times : np.ndarray
         Time course.
     beh_data : dict
         Dictionary containing behavioral data.
-    param_data : ndarray
+    param_data : np.ndarray
         Array containing parameterized data for decoding.
     n_blocks : int (default: params.N_BLOCKS)
         Number of blocks to split trials into.
 
     Returns
     -------
-    param_arr : ndarray
+    param_arr : np.ndarray
         Array containing averaged parameterized data for decoding.
     """
     # Extract relative variables from data
@@ -150,20 +149,20 @@ def iem_one_timepoint(train_data, train_labels, test_data, test_labels):
 
     Parameters
     ----------
-    train_data : ndarray
+    train_data : np.ndarray
         Array containing training data.
-    train_labels : ndarray
+    train_labels : np.ndarray
         Array containing training labels.
-    test_data : ndarray
+    test_data : np.ndarray
         Array containing testing data.
-    test_labels : ndarray
+    test_labels : np.ndarray
         Array containing testing labels.
 
     Returns
     -------
-    mean_channel_offset : ndarray
+    mean_channel_offset : np.ndarray
         Array containing mean channel offset from fitted IEM.
-    ctf_slope : ndarray
+    ctf_slope : np.ndarray
         Array containing CTF slope from fitted IEM.
     """
     # Initialize IEM instance
@@ -188,13 +187,13 @@ def iem_one_block(
 
     Parameters
     ----------
-    train_data : ndarray
+    train_data : np.ndarray
         Array containing training data.
-    train_labels : ndarray
+    train_labels : np.ndarray
         Array containing training labels.
-    test_data : ndarray
+    test_data : np.ndarray
         Array containing testing data.
-    test_labels : ndarray
+    test_labels : np.ndarray
         Array containing testing labels.
     time_axis : int (default: -1)
         Axis of data array containing time points.  Default is -1, which
@@ -202,9 +201,9 @@ def iem_one_block(
 
     Returns
     -------
-    mean_channel_offset : ndarray
+    mean_channel_offset : np.ndarray
         Array containing mean channel offset from fitted IEM.
-    ctf_slope : ndarray
+    ctf_slope : np.ndarray
         Array containing CTF slope from fitted IEM.
     """
     # Organize data into lists of arrays for each time point
@@ -229,9 +228,9 @@ def plot_channel_offset(channel_offset_arr, t_arr, save_fname=None):
 
     Parameters
     ----------
-    channel_offset_arr : ndarray
+    channel_offset_arr : np.ndarray
         Array containing channel offset.
-    t_arr : ndarray
+    t_arr : np.ndarray
         Array containing time points.
     save_fname : str (default: None)
         File name to save figure to.  If None, figure will not be saved.
@@ -251,7 +250,7 @@ def plot_channel_offset(channel_offset_arr, t_arr, save_fname=None):
     plt.xlabel('Time (s)')
     plt.ylabel('Channel Offset')
 
-    # Add colorbar
+    # Add color bar
     plt.colorbar(label='Channel Response')
 
     # Save if desired
@@ -271,7 +270,7 @@ def plot_ctf_slope(
     ctf_slopes : dict
         Dictionary containing CTF slopes for each parameter. Keys are parameter
         names and values are arrays containing CTF slopes.
-    t_arr : ndarray
+    t_arr : np.ndarray
         Array containing time points.
     palette : dict (default: None)
         Dictionary containing colors for each parameter.  Keys are parameter
@@ -309,6 +308,7 @@ def plot_ctf_slope(
 
     # Plot CTF slope time course for each parameter
     plt.figure(figsize=(10, 6))
+    ctf_slopes_big_df['CTF slope'] = -ctf_slopes_big_df['CTF slope']
     ax = sns.lineplot(
         data=ctf_slopes_big_df, hue='Parameter', x='Time (s)', y='CTF slope',
         style='Shuffled location labels?', palette=palette, legend='brief')
@@ -421,10 +421,10 @@ def train_and_test_one_subj(
     param : str
         Parameter to use for decoding.
     threshold_param : str (default: None)
-        Parameter to use for thresholding.  If None, no thresholding will be
-        done.
+        Parameter to use for applying threshold.  If None, no threshold will be
+        applied.
     threshold_val : float (default: None)
-        Value to use for thresholding.  If None, no thresholding will be done.
+        Value to use for threshold.  If None, no threshold will be applied.
     n_blocks : int (default: params.N_BLOCKS)
         Number of blocks to use for cross-validation.
     n_block_iters : int (default: params.N_BLOCK_ITERS)
@@ -436,11 +436,11 @@ def train_and_test_one_subj(
 
     Returns
     -------
-    mean_channel_offset : ndarray
+    mean_channel_offset : np.ndarray
         Array containing mean channel offset across time.
-    ctf_slope : ndarray
+    ctf_slope : np.ndarray
         Array containing CTF slope across time.
-    times : ndarray
+    times : np.ndarray
         Array containing time points.
     """
     # Start timer
@@ -555,25 +555,25 @@ def train_and_test_all_subjs(
     param_dir : str
         Directory containing parameterized data.
     threshold_param : str (default: None)
-        Parameter to use for thresholding.  If None, no thresholding will be
-        done.
+        Parameter to use for threshold.  If None, no threshold will be
+        applied.
     threshold_val : float (default: None)
-        Value to use for thresholding.  If None, no thresholding will be done.
+        Value to use for threshold.  If None, no threshold will be applied.
     fig_dir : str (default: params.FIG_DIR)
         Directory to save figures to.
 
     Returns
     -------
-    mean_channel_offset_all_subjs : ndarray
+    mean_channel_offset_all_subjs : np.ndarray
         Array containing mean channel offset across subjects.
-    mean_ctf_slopes : ndarray
+    mean_ctf_slopes : np.ndarray
         Array containing CTF slopes across subjects.
-    t_arr : ndarray
+    t_arr : np.ndarray
         Array containing time points.
     """
     # Get all subject IDs
     subjs = sorted(['_'.join(f.split('_')[:2]) for f in os.listdir(
-        param_dir) if param in f])
+        param_dir) if f'_{param}_' in f])
 
     # If desired, only use subjects from one task
     if task_num is not None:

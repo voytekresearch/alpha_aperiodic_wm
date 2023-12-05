@@ -2,7 +2,7 @@
 using same inverted encoding model (IEM) and EEG data as Foster and colleagues
 (https://pubmed.ncbi.nlm.nih.gov/26467522/."""
 
-# Import neccesary modules
+# Import necessary modules
 import os
 import time
 import matplotlib.pyplot as plt
@@ -51,14 +51,14 @@ def plot_ctf_slope_time_courses(
     for task_num, (experiment, _) in enumerate(subjects_by_task):
         ctf_slopes_fname = os.path.join(
             fig_dir, f'ctf_slopes_{experiment}_task{task_num}.png')
-        ctf_slopes_all_params = {
+        ctf_slopes_one_task = {
             k: v[task_num] for k, v in ctf_slopes_all_params.items()}
         ctf_slopes_shuffled = {
             k: v[task_num] for k, v in ctf_slopes_null_all_params.items()}
         plot_ctf_slope(
-            ctf_slopes_all_params, t[task_num], task_num,
+            ctf_slopes_one_task, t[task_num], task_num,
             task_timings=task_timings[task_num],
-            ctf_slopes_shuffled=ctf_slopes_shuffled, palette='Set1',
+            ctf_slopes_shuffled=ctf_slopes_shuffled, palette='Spectral',
             save_fname=ctf_slopes_fname)
 
 
