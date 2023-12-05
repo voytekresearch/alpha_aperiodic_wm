@@ -5,85 +5,141 @@ using same inverted encoding model (IEM) and EEG data as Foster and colleagues
 # Import necessary modules
 import os
 import time
+import json
 import matplotlib.pyplot as plt
 import params
-from train_and_test_iem import plot_ctf_slope, plot_ctf_slope_paired_ttest, \
-    train_and_test_all_subjs
+from train_and_test_iem import (
+    plot_ctf_slope,
+    plot_ctf_slope_paired_ttest,
+    train_and_test_all_subjs,
+)
 
 
 def fit_iem_all_params(
-        sparam_dir=params.SPARAM_DIR, total_power_dir=params.TOTAL_POWER_DIR,
-        verbose=True):
+    sparam_dir=params.SPARAM_DIR,
+    total_power_dir=params.TOTAL_POWER_DIR,
+    verbose=True,
+    iem_output_dir=params.IEM_OUTPUT_DIR,
+):
     """Fit inverted encoding model (IEM) for total power and all parameters from
     spectral parameterization."""
+    # Load IEMs if already computed
+    slopes_fname = f"{iem_output_dir}/ctf_slopes.json"
+    slopes_null_fname = f"{iem_output_dir}/ctf_slopes_null.json"
+    t_arr_fname = f"{iem_output_dir}/t_arr.json"
+    if os.path.exists(slopes_fname):
+        with open(slopes_fname, "r", encoding="utf-8") as slopes_file:
+            ctf_slopes_all_params = json.load(slopes_file)
+        with open(slopes_null_fname, encoding="utf-8") as slopes_null_file:
+            ctf_slopes_null_all_params = json.load(slopes_null_file)
+        with open(t_arr_fname, "r", encoding="utf-8") as t_arr_file:
+            t = json.load(t_arr_file)
+        return ctf_slopes_all_params, ctf_slopes_null_all_params, t
+
     # Determine all parameters to fit IEM for
-    sp_params = set([f.split('_')[-2] for f in os.listdir(
-        sparam_dir) if f.endswith('.fif')])
+    sp_params = set(
+        [
+            f.split("_")[-2]
+            for f in os.listdir(sparam_dir)
+            if f.endswith(".fif")
+        ]
+    )
 
     # Fit IEM for total power
     ctf_slopes_all_params, ctf_slopes_null_all_params = {}, {}
     _, tot_pw_ctf_slopes, tot_pw_ctf_slopes_null, _ = train_and_test_all_subjs(
-        'total_power', total_power_dir)
-    ctf_slopes_all_params['total_power'] = tot_pw_ctf_slopes
-    ctf_slopes_null_all_params['total_power'] = tot_pw_ctf_slopes_null
+        "total_power", total_power_dir
+    )
+    ctf_slopes_all_params["total_power"] = tot_pw_ctf_slopes
+    ctf_slopes_null_all_params["total_power"] = tot_pw_ctf_slopes_null
 
     # Fit IEM for all parameters from spectral parameterization
     for sp_param in sp_params:
         # Start timer
         start = time.time()
-        _, ctf_slopes_one_param, ctf_slopes_null_one_param, t = \
-            train_and_test_all_subjs(sp_param, sparam_dir)
+        (
+            _,
+            ctf_slopes_one_param,
+            ctf_slopes_null_one_param,
+            t,
+        ) = train_and_test_all_subjs(sp_param, sparam_dir)
         ctf_slopes_all_params[sp_param] = ctf_slopes_one_param
         ctf_slopes_null_all_params[sp_param] = ctf_slopes_null_one_param
         if verbose:
-            print(f'Fit IEMs for {sp_param} in {time.time() - start:.2f} s')
+            print(f"Fit IEMs for {sp_param} in {time.time() - start:.2f} s")
+
+    # Save CTF slopes for all parameters from spectral parameterization
+    with open(slopes_fname, "w", encoding="utf-8") as slopes_file:
+        json.dump(ctf_slopes_all_params, slopes_file)
+    with open(slopes_null_fname, "w", encoding="utf-8") as slopes_null_file:
+        json.dump(ctf_slopes_null_all_params, slopes_null_file)
+    with open(t_arr_fname, "w", encoding="utf-8") as t_arr_file:
+        json.dump(t, t_arr_file)
     return ctf_slopes_all_params, ctf_slopes_null_all_params, t
 
 
 def plot_ctf_slope_time_courses(
-        ctf_slopes_all_params, ctf_slopes_null_all_params, t,
-        subjects_by_task=params.SUBJECTS_BY_TASK, fig_dir=params.FIG_DIR,
-        task_timings=params.TASK_TIMINGS):
+    ctf_slopes_all_params,
+    ctf_slopes_null_all_params,
+    t,
+    subjects_by_task=params.SUBJECTS_BY_TASK,
+    fig_dir=params.FIG_DIR,
+    task_timings=params.TASK_TIMINGS,
+):
     """Plot CTF slope time courses for total power and parameters from spectral
     parameterization."""
     # Plot CTF slope time courses for parameters from spectral parameterization
     # model
     for task_num, (experiment, _) in enumerate(subjects_by_task):
         ctf_slopes_fname = os.path.join(
-            fig_dir, f'ctf_slopes_{experiment}_task{task_num}.png')
+            fig_dir, f"ctf_slopes_{experiment}_task{task_num}.png"
+        )
         ctf_slopes_one_task = {
-            k: v[task_num] for k, v in ctf_slopes_all_params.items()}
+            k: v[task_num] for k, v in ctf_slopes_all_params.items()
+        }
         ctf_slopes_shuffled = {
-            k: v[task_num] for k, v in ctf_slopes_null_all_params.items()}
+            k: v[task_num] for k, v in ctf_slopes_null_all_params.items()
+        }
         plot_ctf_slope(
-            ctf_slopes_one_task, t[task_num], task_num,
+            ctf_slopes_one_task,
+            t[task_num],
+            task_num,
             task_timings=task_timings[task_num],
-            ctf_slopes_shuffled=ctf_slopes_shuffled, palette='Spectral',
-            save_fname=ctf_slopes_fname)
+            ctf_slopes_shuffled=ctf_slopes_shuffled,
+            palette="Spectral",
+            save_fname=ctf_slopes_fname,
+        )
 
 
-def plot_paired_ttests(
-        ctf_slopes_all_params, ctf_slopes_null_all_params, t):
+def plot_paired_ttests(ctf_slopes_all_params, ctf_slopes_null_all_params, t):
     """Plot paired t-tests of CTF slopes for desired parameters from spectral
     parameterization model."""
     # Plot paired t-tests of CTF slopes for the aperiodic exponent in first
     # 400 ms after presentation
-    exp_ctf_slope_fname = f'{params.FIG_DIR}/exp_ctf_slope_paired_ttest.png'
-    cmap = plt.get_cmap('Paired')
+    exp_ctf_slope_fname = f"{params.FIG_DIR}/exp_ctf_slope_paired_ttest.png"
+    cmap = plt.get_cmap("Paired")
     plot_ctf_slope_paired_ttest(
-        ctf_slopes_all_params['exponent'], t, (0.0, 0.4),
-        ctf_slopes_shuffled=ctf_slopes_null_all_params['exponent'],
-        palette=(cmap(3), cmap(2)), save_fname=exp_ctf_slope_fname)
+        ctf_slopes_all_params["exponent"],
+        t,
+        (0.0, 0.4),
+        ctf_slopes_shuffled=ctf_slopes_null_all_params["exponent"],
+        palette=(cmap(3), cmap(2)),
+        save_fname=exp_ctf_slope_fname,
+    )
 
     # Plot paired t-tests of CTF slopes for alpha oscillatory power in WM
-    pw_ctf_slope_fname = f'{params.FIG_DIR}/pw_ctf_slope_paired_ttest.png'
+    pw_ctf_slope_fname = f"{params.FIG_DIR}/pw_ctf_slope_paired_ttest.png"
     plot_ctf_slope_paired_ttest(
-        ctf_slopes_all_params['PW'], t, 'WM',
-        ctf_slopes_shuffled=ctf_slopes_null_all_params['PW'],
-        palette=(cmap(1), cmap(0)), save_fname=pw_ctf_slope_fname)
+        ctf_slopes_all_params["PW"],
+        t,
+        "WM",
+        ctf_slopes_shuffled=ctf_slopes_null_all_params["PW"],
+        palette=(cmap(1), cmap(0)),
+        save_fname=pw_ctf_slope_fname,
+    )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # Fit IEM for total power and all parameters from spectral parameterization
     # model
     ctf_slopes, ctf_slopes_null, t_arrays = fit_iem_all_params()
