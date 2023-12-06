@@ -5,7 +5,8 @@ using same inverted encoding model (IEM) and EEG data as Foster and colleagues
 # Import necessary modules
 import os
 import time
-import json
+import pickle
+import cmasher as cmr
 import matplotlib.pyplot as plt
 import params
 from train_and_test_iem import (
@@ -24,26 +25,22 @@ def fit_iem_all_params(
     """Fit inverted encoding model (IEM) for total power and all parameters from
     spectral parameterization."""
     # Load IEMs if already computed
-    slopes_fname = f"{iem_output_dir}/ctf_slopes.json"
-    slopes_null_fname = f"{iem_output_dir}/ctf_slopes_null.json"
-    t_arr_fname = f"{iem_output_dir}/t_arr.json"
+    slopes_fname = f"{iem_output_dir}/ctf_slopes.pkl"
+    slopes_null_fname = f"{iem_output_dir}/ctf_slopes_null.pkl"
+    t_arr_fname = f"{iem_output_dir}/t_arr.pkl"
     if os.path.exists(slopes_fname):
-        with open(slopes_fname, "r", encoding="utf-8") as slopes_file:
-            ctf_slopes_all_params = json.load(slopes_file)
-        with open(slopes_null_fname, encoding="utf-8") as slopes_null_file:
-            ctf_slopes_null_all_params = json.load(slopes_null_file)
-        with open(t_arr_fname, "r", encoding="utf-8") as t_arr_file:
-            t = json.load(t_arr_file)
+        with open(slopes_fname, "rb") as slopes_file:
+            ctf_slopes_all_params = pickle.load(slopes_file)
+        with open(slopes_null_fname, "rb") as slopes_null_file:
+            ctf_slopes_null_all_params = pickle.load(slopes_null_file)
+        with open(t_arr_fname, "rb") as t_arr_file:
+            t = pickle.load(t_arr_file)
         return ctf_slopes_all_params, ctf_slopes_null_all_params, t
 
     # Determine all parameters to fit IEM for
-    sp_params = set(
-        [
-            f.split("_")[-2]
-            for f in os.listdir(sparam_dir)
-            if f.endswith(".fif")
-        ]
-    )
+    sp_params = {
+        f.split("_")[-2] for f in os.listdir(sparam_dir) if f.endswith(".fif")
+    }
 
     # Fit IEM for total power
     ctf_slopes_all_params, ctf_slopes_null_all_params = {}, {}
@@ -69,12 +66,12 @@ def fit_iem_all_params(
             print(f"Fit IEMs for {sp_param} in {time.time() - start:.2f} s")
 
     # Save CTF slopes for all parameters from spectral parameterization
-    with open(slopes_fname, "w", encoding="utf-8") as slopes_file:
-        json.dump(ctf_slopes_all_params, slopes_file)
-    with open(slopes_null_fname, "w", encoding="utf-8") as slopes_null_file:
-        json.dump(ctf_slopes_null_all_params, slopes_null_file)
-    with open(t_arr_fname, "w", encoding="utf-8") as t_arr_file:
-        json.dump(t, t_arr_file)
+    with open(slopes_fname, "wb") as slopes_file:
+        pickle.dump(ctf_slopes_all_params, slopes_file)
+    with open(slopes_null_fname, "wb") as slopes_null_file:
+        pickle.dump(ctf_slopes_null_all_params, slopes_null_file)
+    with open(t_arr_fname, "wb") as t_arr_file:
+        pickle.dump(t, t_arr_file)
     return ctf_slopes_all_params, ctf_slopes_null_all_params, t
 
 
@@ -82,6 +79,9 @@ def plot_ctf_slope_time_courses(
     ctf_slopes_all_params,
     ctf_slopes_null_all_params,
     t,
+    param_sets=None,
+    palettes=None,
+    name="",
     subjects_by_task=params.SUBJECTS_BY_TASK,
     fig_dir=params.FIG_DIR,
     task_timings=params.TASK_TIMINGS,
@@ -91,24 +91,48 @@ def plot_ctf_slope_time_courses(
     # Plot CTF slope time courses for parameters from spectral parameterization
     # model
     for task_num, (experiment, _) in enumerate(subjects_by_task):
-        ctf_slopes_fname = os.path.join(
-            fig_dir, f"ctf_slopes_{experiment}_task{task_num}.png"
-        )
         ctf_slopes_one_task = {
             k: v[task_num] for k, v in ctf_slopes_all_params.items()
         }
         ctf_slopes_shuffled = {
             k: v[task_num] for k, v in ctf_slopes_null_all_params.items()
         }
-        plot_ctf_slope(
-            ctf_slopes_one_task,
-            t[task_num],
-            task_num,
-            task_timings=task_timings[task_num],
-            ctf_slopes_shuffled=ctf_slopes_shuffled,
-            palette="Spectral",
-            save_fname=ctf_slopes_fname,
+
+        # Set default parameter sets and palettes
+        if param_sets is None:
+            param_sets = [list(ctf_slopes_one_task.keys())]
+        if palettes is None:
+            palettes = ["rocket"]
+
+        # Plot CTF slope time courses for each parameter set and palette
+        for param_set, palette in zip(params, palettes):
+            # Get CTF slopes for parameter set
+            ctf_slopes_one_param_set = {
+                k: v for k, v in ctf_slopes_one_task.items() if k in param_set
+            }
+            ctf_slopes_shuffled_one_param_set = {
+                k: v for k, v in ctf_slopes_shuffled.items() if k in param_set
+            }
+
+            # Plot CTF slope time courses for parameter set and palette
+            fig = plt.figure(figsize=(10, 6))
+            fig = plot_ctf_slope(
+                ctf_slopes_one_param_set,
+                t[task_num],
+                task_num,
+                fig=fig,
+                task_timings=task_timings[task_num],
+                ctf_slopes_shuffled=ctf_slopes_shuffled_one_param_set,
+                palette=palette,
+            )
+
+        # Save figure
+        ctf_slopes_fname = os.path.join(
+            fig_dir, f"ctf_slopes_{experiment}_task{task_num}.png"
         )
+        if len(name) > 0:
+            ctf_slopes_fname = ctf_slopes_fname.replace(".", f"_{name}.")
+        plt.savefig(ctf_slopes_fname, dpi=300, bbox_inches="tight")
 
 
 def plot_paired_ttests(ctf_slopes_all_params, ctf_slopes_null_all_params, t):
@@ -144,9 +168,60 @@ if __name__ == "__main__":
     # model
     ctf_slopes, ctf_slopes_null, t_arrays = fit_iem_all_params()
 
-    # Plot CTF slope time courses for parameters from spectral parameterization
-    # model
+    # Plot CTF slope time courses for all parameters from spectral
+    # parameterization model
     plot_ctf_slope_time_courses(ctf_slopes, ctf_slopes_null, t_arrays)
+
+    # Plot CTF slope time courses for relevant comparisons of parameters from
+    # spectral parameterization model
+    all_params = sorted(
+        list(
+            {
+                f.split("_")[-2]
+                for f in os.listdir(params.SPARAM_DIR)
+                if f.endswith(".fif")
+            }
+        )
+    )
+    log_params = [p for p in all_params if "log" in p]
+    lin_params = [p for p in all_params if "lin" in p]
+    subj_params = [p for p in all_params if "Subj" in p]
+    non_subj_params = [
+        p
+        for p in all_params
+        if p in log_params + lin_params and p not in subj_params
+    ]
+    tot_params = [p for p in all_params if "tot" in p or "Tot" in p]
+    osc_params = [p for p in all_params if "Osc" in p or "PW" in p]
+    error_params = ["MSE", "R^2"]
+    fit_params = [
+        p for p in all_params if "AUC" not in p and p not in error_params
+    ]
+    comps = [
+        [log_params, lin_params],
+        [subj_params, non_subj_params],
+        [tot_params, osc_params],
+        [error_params, fit_params],
+    ]
+    comp_palettes = ["PiYG", "BrBG", "PuOr", "RdBu"]
+    comp_names = [
+        "log_vs_lin",
+        "subj_vs_non_subj",
+        "tot_vs_osc",
+        "error_vs_fit",
+    ]
+    for comp, comp_palette, comp_name in zip(comps, comp_palettes, comp_names):
+        plot_ctf_slope_time_courses(
+            ctf_slopes,
+            ctf_slopes_null,
+            t_arrays,
+            param_sets=comp,
+            palettes=[
+                cmr.get_sub_cmap(comp_palette, 0.0, 0.5),
+                cmr.get_sub_cmap(comp_palette, 0.5, 1.0),
+            ],
+            name=comp_name,
+        )
 
     # Plot paired t-tests of CTF slopes for parameters from spectral
     # parameterization model

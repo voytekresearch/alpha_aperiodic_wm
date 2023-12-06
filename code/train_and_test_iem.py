@@ -261,7 +261,7 @@ def plot_channel_offset(channel_offset_arr, t_arr, save_fname=None):
 
 def plot_ctf_slope(
         ctf_slopes, t_arr, task_num, task_timings, ctf_slopes_shuffled=None,
-        palette=None, save_fname=None):
+        palette=None, save_fname=None, fig=None):
     """Plot channel tuning function (CTF) across time for multiple
     parameters.
 
@@ -307,7 +307,8 @@ def plot_ctf_slope(
     ctf_slopes_big_df = pd.concat(ctf_slopes_dfs).reset_index()
 
     # Plot CTF slope time course for each parameter
-    plt.figure(figsize=(10, 6))
+    if fig is None:
+        fig = plt.figure(figsize=(10, 6))
     ctf_slopes_big_df['CTF slope'] = -ctf_slopes_big_df['CTF slope']
     ax = sns.lineplot(
         data=ctf_slopes_big_df, hue='Parameter', x='Time (s)', y='CTF slope',
@@ -339,7 +340,8 @@ def plot_ctf_slope(
     # Save if desired
     if save_fname:
         plt.savefig(save_fname, bbox_inches='tight', dpi=300)
-    plt.close()
+        plt.close()
+    return fig
 
 
 def plot_ctf_slope_paired_ttest(
