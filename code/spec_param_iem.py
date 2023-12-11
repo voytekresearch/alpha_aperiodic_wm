@@ -105,7 +105,8 @@ def plot_ctf_slope_time_courses(
             palettes = ["rocket"]
 
         # Plot CTF slope time courses for each parameter set and palette
-        for param_set, palette in zip(params, palettes):
+        fig = plt.figure(figsize=(10, 6))
+        for i, (param_set, palette) in enumerate(zip(param_sets, palettes)):
             # Get CTF slopes for parameter set
             ctf_slopes_one_param_set = {
                 k: v for k, v in ctf_slopes_one_task.items() if k in param_set
@@ -115,7 +116,7 @@ def plot_ctf_slope_time_courses(
             }
 
             # Plot CTF slope time courses for parameter set and palette
-            fig = plt.figure(figsize=(10, 6))
+            plt_timings = i == len(param_sets) - 1
             fig = plot_ctf_slope(
                 ctf_slopes_one_param_set,
                 t[task_num],
@@ -124,6 +125,8 @@ def plot_ctf_slope_time_courses(
                 task_timings=task_timings[task_num],
                 ctf_slopes_shuffled=ctf_slopes_shuffled_one_param_set,
                 palette=palette,
+                plot_timings=plt_timings,
+                plot_errorbars=False,
             )
 
         # Save figure
@@ -133,6 +136,7 @@ def plot_ctf_slope_time_courses(
         if len(name) > 0:
             ctf_slopes_fname = ctf_slopes_fname.replace(".", f"_{name}.")
         plt.savefig(ctf_slopes_fname, dpi=300, bbox_inches="tight")
+        plt.close()
 
 
 def plot_paired_ttests(ctf_slopes_all_params, ctf_slopes_null_all_params, t):
@@ -166,7 +170,7 @@ def plot_paired_ttests(ctf_slopes_all_params, ctf_slopes_null_all_params, t):
 if __name__ == "__main__":
     # Fit IEM for total power and all parameters from spectral parameterization
     # model
-    ctf_slopes, ctf_slopes_null, t_arrays = fit_iem_all_params()
+    ctf_slopes, ctf_slopes_null, t_arrays = fit_iem_all_params(verbose=False)
 
     # Plot CTF slope time courses for all parameters from spectral
     # parameterization model
@@ -174,15 +178,14 @@ if __name__ == "__main__":
 
     # Plot CTF slope time courses for relevant comparisons of parameters from
     # spectral parameterization model
-    all_params = sorted(
-        list(
-            {
-                f.split("_")[-2]
-                for f in os.listdir(params.SPARAM_DIR)
-                if f.endswith(".fif")
-            }
-        )
+    all_params = list(
+        {
+            f.split("_")[-2]
+            for f in os.listdir(params.SPARAM_DIR)
+            if f.endswith(".fif")
+        }
     )
+    all_params = sorted(all_params + ["total_power"])
     log_params = [p for p in all_params if "log" in p]
     lin_params = [p for p in all_params if "lin" in p]
     subj_params = [p for p in all_params if "Subj" in p]
@@ -197,7 +200,8 @@ if __name__ == "__main__":
     fit_params = [
         p for p in all_params if "AUC" not in p and p not in error_params
     ]
-    comps = [
+    fit_params.remove("total_power")
+    comp_sets = [
         [log_params, lin_params],
         [subj_params, non_subj_params],
         [tot_params, osc_params],
@@ -210,15 +214,21 @@ if __name__ == "__main__":
         "tot_vs_osc",
         "error_vs_fit",
     ]
-    for comp, comp_palette, comp_name in zip(comps, comp_palettes, comp_names):
+    for comp_set, comp_palette, comp_name in zip(
+        comp_sets, comp_palettes, comp_names
+    ):
         plot_ctf_slope_time_courses(
             ctf_slopes,
             ctf_slopes_null,
             t_arrays,
-            param_sets=comp,
+            param_sets=comp_set,
             palettes=[
-                cmr.get_sub_cmap(comp_palette, 0.0, 0.5),
-                cmr.get_sub_cmap(comp_palette, 0.5, 1.0),
+                cmr.take_cmap_colors(
+                    comp_palette, len(comp_set[0]), cmap_range=(0.0, 0.35)
+                ),
+                cmr.take_cmap_colors(
+                    comp_palette, len(comp_set[1]), cmap_range=(0.65, 1.0)
+                ),
             ],
             name=comp_name,
         )
