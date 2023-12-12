@@ -167,7 +167,7 @@ def plot_paired_ttests(ctf_slopes_all_params, ctf_slopes_null_all_params, t):
     parameterization model."""
     # Plot paired t-tests of CTF slopes for the aperiodic exponent in first
     # 400 ms after presentation
-    exp_ctf_slope_fname = f"{params.FIG_DIR}/exp_ctf_slope_paired_ttest.png"
+    exp_ctf_slope_fname = f"{params.FIG_DIR}/exp_ctf_slope_paired_t-test.png"
     cmap = plt.get_cmap("Paired")
     plot_ctf_slope_paired_ttest(
         ctf_slopes_all_params["exponent"],
@@ -179,7 +179,7 @@ def plot_paired_ttests(ctf_slopes_all_params, ctf_slopes_null_all_params, t):
     )
 
     # Plot paired t-tests of CTF slopes for alpha oscillatory power in WM
-    pw_ctf_slope_fname = f"{params.FIG_DIR}/pw_ctf_slope_paired_ttest.png"
+    pw_ctf_slope_fname = f"{params.FIG_DIR}/pw_ctf_slope_paired_t-test.png"
     plot_ctf_slope_paired_ttest(
         ctf_slopes_all_params["PW"],
         t,
