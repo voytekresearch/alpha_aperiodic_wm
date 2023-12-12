@@ -293,9 +293,9 @@ def plot_ctf_slope(
     ctf_slopes_shuffled=None,
     palette=None,
     save_fname=None,
-    fig=None,
     plot_timings=True,
     plot_errorbars=False,
+    ax=None,
 ):
     """Plot channel tuning function (CTF) across time for multiple
     parameters.
@@ -347,12 +347,10 @@ def plot_ctf_slope(
     ctf_slopes_big_df = pd.concat(ctf_slopes_dfs).reset_index()
 
     # Plot CTF slope time course for each parameter
-    if fig is None:
-        fig = plt.figure(figsize=(10, 6))
+    if ax is None:
+        _, ax = plt.subplots(1, 1, figsize=(10, 6))
     ctf_slopes_big_df["CTF slope"] = -ctf_slopes_big_df["CTF slope"]
-    ci = None
-    if plot_errorbars:
-        ci = 95
+    ci = 95 if plot_errorbars else None
     ax = sns.lineplot(
         data=ctf_slopes_big_df,
         hue="Parameter",
@@ -362,51 +360,53 @@ def plot_ctf_slope(
         palette=palette,
         legend="brief",
         ci=ci,
+        ax=ax,
     )
-    legend = ax.legend(loc="upper left", bbox_to_anchor=(1.1, 1), ncol=2)
-    if task_num > 0:
+
+    # Plot aesthetics
+    legend = ax.legend(loc="upper left", bbox_to_anchor=(1.1, 1))
+    if task_num != 0 or not save_fname:
         legend.remove()
-    _, _, _, ymax = plt.axis()
+    _, _, _, ymax = ax.axis()
     if plot_timings:
-        plt.axvline(0.0, c="gray", ls="--")
-        plt.text(
-            0.03, ymax, "Stimulus onset", va="bottom", ha="right", size=16
-        )
-        plt.axvline(task_timings[0], c="gray", ls="--")
+        ax.axvline(0.0, c="gray", ls="--")
+        ax.text(0.03, ymax, "Stimulus onset", va="bottom", ha="right", size=24)
+        ax.axvline(task_timings[0], c="gray", ls="--")
         offset_x, offset_ha = task_timings[0] + 0.03, "left"
         if task_timings[0] > 0.75:
             offset_x, offset_ha = task_timings[0], "center"
-        plt.text(
+        ax.text(
             offset_x,
             ymax,
             "Stimulus offset",
             va="bottom",
             ha=offset_ha,
-            size=16,
+            size=24,
         )
-        plt.axvline(task_timings[1], c="gray", ls="--")
-        plt.text(
+        ax.axvline(task_timings[1], c="gray", ls="--")
+        ax.text(
             task_timings[1],
             ymax,
             "Free response",
             va="bottom",
             ha="center",
-            size=16,
+            size=24,
         )
-    plt.title(
-        f"Task {task_num + 1} (n = {n})", size=28, y=1.08, fontweight="bold"
+    ax.set_title(
+        f"Task {task_num + 1} (n = {n})",
+        fontsize=48,
+        fontweight="bold",
+        y=1.08,
     )
-    plt.xlabel("Time (s)", size=20)
-    plt.ylabel("CTF slope", size=20)
-    plt.xticks(size=12)
-    plt.yticks(size=12)
-    sns.despine()
+    ax.set_xlabel("Time (s)", size=28)
+    ax.set_ylabel("CTF slope", size=28)
+    ax.tick_params(labelsize=20)
+    sns.despine(ax=ax)
 
     # Save if desired
     if save_fname:
         plt.savefig(save_fname, bbox_inches="tight", dpi=300)
         plt.close()
-    return fig
 
 
 def plot_ctf_slope_paired_ttest(

@@ -19,8 +19,7 @@ SUBJECTS_BY_TASK = (('JNP', tuple(range(15))),
                     ('CB1', tuple(range(12))),
                     ('CB2', tuple(range(18))),
                     ('CB2', tuple(range(18, 32))),
-                    ('CS', tuple(range(24))),
-                    ('SB', tuple(range(36))))
+                    ('CS', tuple(range(24))))
 TASK_TIMINGS = ((0.25, 2.0),
                 (1.0, 2.0),
                 (0.25, 2.0),

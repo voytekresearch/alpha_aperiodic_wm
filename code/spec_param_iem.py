@@ -8,6 +8,9 @@ import time
 import pickle
 import cmasher as cmr
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
+import numpy as np
+import pandas as pd
 import params
 from train_and_test_iem import (
     plot_ctf_slope,
@@ -88,9 +91,20 @@ def plot_ctf_slope_time_courses(
 ):
     """Plot CTF slope time courses for total power and parameters from spectral
     parameterization."""
+    # Set default parameter sets and palettes
+    if param_sets is None:
+        param_sets = [list(ctf_slopes_all_params.keys())]
+    if palettes is None:
+        palettes = ["rocket"]
+
+    # Create a GridSpec with one row and the number of tasks as columns
+    num_tasks = len(subjects_by_task)
+    fig = plt.figure(figsize=(24, 40), constrained_layout=True)
+    gs = gridspec.GridSpec(num_tasks // 2 + 1, 2, figure=fig)
+
     # Plot CTF slope time courses for parameters from spectral parameterization
     # model
-    for task_num, (experiment, _) in enumerate(subjects_by_task):
+    for task_num in range(len(subjects_by_task)):
         ctf_slopes_one_task = {
             k: v[task_num] for k, v in ctf_slopes_all_params.items()
         }
@@ -98,14 +112,10 @@ def plot_ctf_slope_time_courses(
             k: v[task_num] for k, v in ctf_slopes_null_all_params.items()
         }
 
-        # Set default parameter sets and palettes
-        if param_sets is None:
-            param_sets = [list(ctf_slopes_one_task.keys())]
-        if palettes is None:
-            palettes = ["rocket"]
+        # Get the corresponding subplot from the GridSpec
+        ax = fig.add_subplot(gs[task_num // 2, task_num % 2])
 
         # Plot CTF slope time courses for each parameter set and palette
-        fig = plt.figure(figsize=(10, 6))
         for i, (param_set, palette) in enumerate(zip(param_sets, palettes)):
             # Get CTF slopes for parameter set
             ctf_slopes_one_param_set = {
@@ -117,26 +127,35 @@ def plot_ctf_slope_time_courses(
 
             # Plot CTF slope time courses for parameter set and palette
             plt_timings = i == len(param_sets) - 1
-            fig = plot_ctf_slope(
+            plot_ctf_slope(
                 ctf_slopes_one_param_set,
                 t[task_num],
                 task_num,
-                fig=fig,
                 task_timings=task_timings[task_num],
                 ctf_slopes_shuffled=ctf_slopes_shuffled_one_param_set,
                 palette=palette,
                 plot_timings=plt_timings,
                 plot_errorbars=False,
+                ax=ax,
             )
 
-        # Save figure
-        ctf_slopes_fname = os.path.join(
-            fig_dir, f"ctf_slopes_{experiment}_task{task_num}.png"
-        )
-        if len(name) > 0:
-            ctf_slopes_fname = ctf_slopes_fname.replace(".", f"_{name}.")
-        plt.savefig(ctf_slopes_fname, dpi=300, bbox_inches="tight")
-        plt.close()
+    # Get legend handles and labels from last axis
+    handles, labels = ax.get_legend_handles_labels()
+    dup_idx = np.where(pd.DataFrame(labels).duplicated(keep=False))[0]
+    remove_idx = dup_idx[1 : 1 + len(dup_idx) // 2]
+    handles = [h for i, h in enumerate(handles) if i not in remove_idx]
+    labels = [l for i, l in enumerate(labels) if i not in remove_idx]
+    ax_legend = fig.add_subplot(gs[-1, -1])
+    ax_legend.axis("off")
+    ax_legend.legend(handles, labels, loc="center", fontsize=24)
+
+    # Save figure
+    os.makedirs(fig_dir, exist_ok=True)
+    ctf_slopes_fname = f"{fig_dir}/ctf_slopes.png"
+    if len(name) > 0:
+        ctf_slopes_fname = ctf_slopes_fname.replace(".", f"_{name}.")
+    plt.savefig(ctf_slopes_fname, dpi=300, bbox_inches="tight")
+    plt.close()
 
 
 def plot_paired_ttests(ctf_slopes_all_params, ctf_slopes_null_all_params, t):
