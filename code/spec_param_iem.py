@@ -162,47 +162,13 @@ def plot_ctf_slope_time_courses(
     plt.close()
 
 
-def plot_paired_ttests(ctf_slopes_all_params, ctf_slopes_null_all_params, t):
-    """Plot paired t-tests of CTF slopes for desired parameters from spectral
+def compare_params_ctf_time_courses(
+    ctf_slopes_all_params,
+    ctf_slopes_null_all_params,
+    t,
+):
+    """Compare CTF slope time courses for different parameters from spectral
     parameterization model."""
-    # Plot paired t-tests of CTF slopes for the aperiodic exponent in first
-    # 400 ms after presentation
-    exp_ctf_slope_fname = f"{params.FIG_DIR}/exp_ctf_slope_paired_t-test.png"
-    cmap = plt.get_cmap("Paired")
-    plot_ctf_slope_paired_ttest(
-        ctf_slopes_all_params["exponent"],
-        t,
-        (0.0, 0.4),
-        ctf_slopes_shuffled=ctf_slopes_null_all_params["exponent"],
-        palette=(cmap(3), cmap(2)),
-        save_fname=exp_ctf_slope_fname,
-    )
-
-    # Plot paired t-tests of CTF slopes for alpha oscillatory power in WM
-    pw_ctf_slope_fname = f"{params.FIG_DIR}/pw_ctf_slope_paired_t-test.png"
-    plot_ctf_slope_paired_ttest(
-        ctf_slopes_all_params["PW"],
-        t,
-        "WM",
-        ctf_slopes_shuffled=ctf_slopes_null_all_params["PW"],
-        palette=(cmap(1), cmap(0)),
-        save_fname=pw_ctf_slope_fname,
-    )
-
-
-if __name__ == "__main__":
-    # Fit IEM for total power and all parameters from spectral parameterization
-    # model
-    ctf_slopes, ctf_slopes_null, t_arrays = fit_iem_all_params(verbose=False)
-
-    # Plot CTF slope time courses for all parameters from spectral
-    # parameterization model
-    plot_ctf_slope_time_courses(
-        ctf_slopes, ctf_slopes_null, t_arrays, title="All parameters"
-    )
-
-    # Plot CTF slope time courses for relevant comparisons of parameters from
-    # spectral parameterization model
     all_params = list(
         {
             f.split("_")[-2]
@@ -249,9 +215,9 @@ if __name__ == "__main__":
         comp_sets, comp_palettes, comp_names, comp_titles
     ):
         plot_ctf_slope_time_courses(
-            ctf_slopes,
-            ctf_slopes_null,
-            t_arrays,
+            ctf_slopes_all_params,
+            ctf_slopes_null_all_params,
+            t,
             param_sets=comp_set,
             palettes=[
                 cmr.take_cmap_colors(
@@ -264,6 +230,50 @@ if __name__ == "__main__":
             name=comp_name,
             title=comp_title,
         )
+
+
+def plot_paired_ttests(ctf_slopes_all_params, ctf_slopes_null_all_params, t):
+    """Plot paired t-tests of CTF slopes for desired parameters from spectral
+    parameterization model."""
+    # Plot paired t-tests of CTF slopes for the aperiodic exponent in first
+    # 400 ms after presentation
+    exp_ctf_slope_fname = f"{params.FIG_DIR}/exp_ctf_slope_paired_t-test.png"
+    cmap = plt.get_cmap("Paired")
+    plot_ctf_slope_paired_ttest(
+        ctf_slopes_all_params["exponent"],
+        t,
+        (0.0, 0.4),
+        ctf_slopes_shuffled=ctf_slopes_null_all_params["exponent"],
+        palette=(cmap(3), cmap(2)),
+        save_fname=exp_ctf_slope_fname,
+    )
+
+    # Plot paired t-tests of CTF slopes for alpha oscillatory power in WM
+    pw_ctf_slope_fname = f"{params.FIG_DIR}/pw_ctf_slope_paired_t-test.png"
+    plot_ctf_slope_paired_ttest(
+        ctf_slopes_all_params["PW"],
+        t,
+        "WM",
+        ctf_slopes_shuffled=ctf_slopes_null_all_params["PW"],
+        palette=(cmap(1), cmap(0)),
+        save_fname=pw_ctf_slope_fname,
+    )
+
+
+if __name__ == "__main__":
+    # Fit IEM for total power and all parameters from spectral parameterization
+    # model
+    ctf_slopes, ctf_slopes_null, t_arrays = fit_iem_all_params(verbose=False)
+
+    # Plot CTF slope time courses for all parameters from spectral
+    # parameterization model
+    plot_ctf_slope_time_courses(
+        ctf_slopes, ctf_slopes_null, t_arrays, title="All parameters"
+    )
+
+    # Plot CTF slope time courses for relevant comparisons of parameters from
+    # spectral parameterization model
+    compare_params_ctf_time_courses(ctf_slopes, ctf_slopes_null, t_arrays)
 
     # Plot paired t-tests of CTF slopes for parameters from spectral
     # parameterization model

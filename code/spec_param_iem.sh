@@ -4,7 +4,7 @@
 #SBATCH --nodes=1
 #SBATCH --exclusive
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=24
+#SBATCH --cpus-per-task=68
 #SBATCH --mem-per-cpu=2G
 #SBATCH --output=spec_param_iem.out
 #SBATCH --mail-type=ALL
