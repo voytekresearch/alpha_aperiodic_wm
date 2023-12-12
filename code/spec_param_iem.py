@@ -85,6 +85,7 @@ def plot_ctf_slope_time_courses(
     param_sets=None,
     palettes=None,
     name="",
+    title="",
     subjects_by_task=params.SUBJECTS_BY_TASK,
     fig_dir=params.FIG_DIR,
     task_timings=params.TASK_TIMINGS,
@@ -149,6 +150,9 @@ def plot_ctf_slope_time_courses(
     ax_legend.axis("off")
     ax_legend.legend(handles, labels, loc="center", fontsize=24)
 
+    # Add title
+    fig.suptitle(title, fontsize=64, fontweight="bold", y=1.03)
+
     # Save figure
     os.makedirs(fig_dir, exist_ok=True)
     ctf_slopes_fname = f"{fig_dir}/ctf_slopes.png"
@@ -193,7 +197,9 @@ if __name__ == "__main__":
 
     # Plot CTF slope time courses for all parameters from spectral
     # parameterization model
-    plot_ctf_slope_time_courses(ctf_slopes, ctf_slopes_null, t_arrays)
+    plot_ctf_slope_time_courses(
+        ctf_slopes, ctf_slopes_null, t_arrays, title="All parameters"
+    )
 
     # Plot CTF slope time courses for relevant comparisons of parameters from
     # spectral parameterization model
@@ -233,8 +239,14 @@ if __name__ == "__main__":
         "tot_vs_osc",
         "error_vs_fit",
     ]
-    for comp_set, comp_palette, comp_name in zip(
-        comp_sets, comp_palettes, comp_names
+    comp_titles = [
+        "Logarithmic vs linear difference",
+        "Subject-specific alpha band or not",
+        "Aperiodic-adjusted alpha power or not",
+        "Spectral parameterization fit vs error",
+    ]
+    for comp_set, comp_palette, comp_name, comp_title in zip(
+        comp_sets, comp_palettes, comp_names, comp_titles
     ):
         plot_ctf_slope_time_courses(
             ctf_slopes,
@@ -250,6 +262,7 @@ if __name__ == "__main__":
                 ),
             ],
             name=comp_name,
+            title=comp_title,
         )
 
     # Plot paired t-tests of CTF slopes for parameters from spectral
