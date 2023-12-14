@@ -664,7 +664,7 @@ def train_and_test_all_subjs(
     fig_dir=params.FIG_DIR,
     subjects_by_task=params.SUBJECTS_BY_TASK,
 ):
-    """Train and test for all subjects,.
+    """Train and test for all subjects.
 
     Parameters
     ----------

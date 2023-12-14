@@ -100,8 +100,8 @@ def plot_ctf_slope_time_courses(
 
     # Create a GridSpec with one row and the number of tasks as columns
     num_tasks = len(subjects_by_task)
-    fig = plt.figure(figsize=(24, 40), constrained_layout=True)
-    gs = gridspec.GridSpec(num_tasks // 2 + 1, 2, figure=fig)
+    fig = plt.figure(figsize=(48, 20), constrained_layout=True)
+    gs = gridspec.GridSpec(2, num_tasks // 2 + 1, figure=fig)
 
     # Plot CTF slope time courses for parameters from spectral parameterization
     # model
@@ -114,7 +114,7 @@ def plot_ctf_slope_time_courses(
         }
 
         # Get the corresponding subplot from the GridSpec
-        ax = fig.add_subplot(gs[task_num // 2, task_num % 2])
+        ax = fig.add_subplot(gs[task_num % 2, task_num // 2])
 
         # Plot CTF slope time courses for each parameter set and palette
         for i, (param_set, palette) in enumerate(zip(param_sets, palettes)):
@@ -151,7 +151,7 @@ def plot_ctf_slope_time_courses(
     ax_legend.legend(handles, labels, loc="center", fontsize=24)
 
     # Add title
-    fig.suptitle(title, fontsize=64, fontweight="bold", y=1.03)
+    fig.suptitle(title, fontsize=64, fontweight="bold", y=1.05)
 
     # Save figure
     os.makedirs(fig_dir, exist_ok=True)
