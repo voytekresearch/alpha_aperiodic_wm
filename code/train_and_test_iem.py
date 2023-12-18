@@ -84,7 +84,7 @@ def load_param_data(
     # Load parameterized data
     param_data = mne.read_epochs(
         os.path.join(param_dir, f"{subj}_{param}_epo.fif"), verbose=False
-    ).get_data()
+    ).get_data(copy=True)
     param_data = param_data[~beh_nan, :, :]
 
     # Load parameterized data for threshold parameter
@@ -127,7 +127,7 @@ def average_param_data_within_trial_blocks(
     # Extract relative variables from data
     assert np.count_nonzero(np.isnan(beh_data)) == 0
     n_bins = np.sum(~np.isnan(np.unique(beh_data)))
-    n_channels = epochs.get_data().shape[-2]
+    n_channels = epochs.get_data(copy=True).shape[-2]
     n_timepts = len(times)
 
     # Determine number of trials per location bin

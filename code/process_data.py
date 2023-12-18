@@ -266,7 +266,7 @@ def run_decomp_and_sparam_all_trials(
     ]
 
     # Determine number of trials
-    n_trials = epochs.get_data().shape[0]
+    n_trials = epochs.get_data(copy=True).shape[0]
 
     # If not all trials have been computed, compute remaining trials
     if not len(trials_computed) == n_trials:
