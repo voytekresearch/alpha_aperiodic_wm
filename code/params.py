@@ -16,7 +16,7 @@ FIG_DIR = "figs"
 SUBJECTS_BY_TASK = (
     ("JNP", tuple(range(15))),
     ("JNP", tuple(range(15, 30))),
-    ("JNP", tuple(range(30, 45))),
+    ("JNP", tuple(range(30, 44))),
     ("CB1", tuple(range(12))),
     ("CB2", tuple(range(18))),
     ("CB2", tuple(range(18, 32))),

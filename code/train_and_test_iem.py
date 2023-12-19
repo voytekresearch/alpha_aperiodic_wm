@@ -237,8 +237,7 @@ def iem_one_block(
 
     # Parallelize training and testing of IEM across time points
     with mp.Pool() as pool:
-        pool_out = pool.starmap(iem_one_timepoint, args)
-    ctf_slope = list(zip(*pool_out))
+        ctf_slope = pool.starmap(iem_one_timepoint, args)
     return np.array(ctf_slope)
 
 
@@ -621,8 +620,8 @@ def train_and_test_all_subjs(
     t_arr : np.ndarray
         Array containing time points.
     """
-    # Get all subject IDs
-    subjs = sorted(
+    # Get all subject IDs that were processed
+    subjs_processed = sorted(
         [
             "_".join(f.split("_")[:2])
             for f in os.listdir(param_dir)
@@ -630,11 +629,16 @@ def train_and_test_all_subjs(
         ]
     )
 
-    # If desired, only use subjects from one task
+    # Get all subject IDs for IEMs, excluding those that were not
+    # processed or excluded
     if task_num is not None:
-        experiment, subj_ids = subjects_by_task[task_num]
-        subjs = ["_".join((experiment, subj_id)) for subj_id in subj_ids]
         subjects_by_task = [subjects_by_task[task_num]]
+    subjs = []
+    for experiment, subj_ids in subjects_by_task:
+        subjs.extend(
+            ["_".join((experiment, str(subj_id))) for subj_id in subj_ids]
+        )
+    subjs = sorted(list(set(subjs) & set(subjs_processed)))
 
     # Initialize arrays to store data across subjects by experiment
     mean_ctf_slopes = [[] for _ in range(len(subjects_by_task))]

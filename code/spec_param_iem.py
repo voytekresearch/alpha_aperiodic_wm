@@ -5,7 +5,6 @@ using same inverted encoding model (IEM) and EEG data as Foster and colleagues
 # Import necessary modules
 import os
 import time
-import pickle
 import cmasher as cmr
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
@@ -23,23 +22,9 @@ def fit_iem_all_params(
     sparam_dir=params.SPARAM_DIR,
     total_power_dir=params.TOTAL_POWER_DIR,
     verbose=True,
-    iem_output_dir=params.IEM_OUTPUT_DIR,
 ):
     """Fit inverted encoding model (IEM) for total power and all parameters from
     spectral parameterization."""
-    # Load IEMs if already computed
-    slopes_fname = f"{iem_output_dir}/ctf_slopes.pkl"
-    slopes_null_fname = f"{iem_output_dir}/ctf_slopes_null.pkl"
-    t_arr_fname = f"{iem_output_dir}/t_arr.pkl"
-    if os.path.exists(slopes_fname):
-        with open(slopes_fname, "rb") as slopes_file:
-            ctf_slopes_all_params = pickle.load(slopes_file)
-        with open(slopes_null_fname, "rb") as slopes_null_file:
-            ctf_slopes_null_all_params = pickle.load(slopes_null_file)
-        with open(t_arr_fname, "rb") as t_arr_file:
-            t = pickle.load(t_arr_file)
-        return ctf_slopes_all_params, ctf_slopes_null_all_params, t
-
     # Determine all parameters to fit IEM for
     sp_params = {
         f.split("_")[-2] for f in os.listdir(sparam_dir) if f.endswith(".fif")
@@ -66,14 +51,6 @@ def fit_iem_all_params(
         ctf_slopes_null_all_params[sp_param] = ctf_slopes_null_one_param
         if verbose:
             print(f"Fit IEMs for {sp_param} in {time.time() - start:.2f} s")
-
-    # Save CTF slopes for all parameters from spectral parameterization
-    with open(slopes_fname, "wb") as slopes_file:
-        pickle.dump(ctf_slopes_all_params, slopes_file)
-    with open(slopes_null_fname, "wb") as slopes_null_file:
-        pickle.dump(ctf_slopes_null_all_params, slopes_null_file)
-    with open(t_arr_fname, "wb") as t_arr_file:
-        pickle.dump(t, t_arr_file)
     return ctf_slopes_all_params, ctf_slopes_null_all_params, t
 
 
