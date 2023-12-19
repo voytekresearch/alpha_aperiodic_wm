@@ -47,7 +47,7 @@ def fit_iem_all_params(
 
     # Fit IEM for total power
     ctf_slopes_all_params, ctf_slopes_null_all_params = {}, {}
-    _, tot_pw_ctf_slopes, tot_pw_ctf_slopes_null, _ = train_and_test_all_subjs(
+    tot_pw_ctf_slopes, tot_pw_ctf_slopes_null, _ = train_and_test_all_subjs(
         "total_power", total_power_dir
     )
     ctf_slopes_all_params["total_power"] = tot_pw_ctf_slopes
@@ -58,7 +58,6 @@ def fit_iem_all_params(
         # Start timer
         start = time.time()
         (
-            _,
             ctf_slopes_one_param,
             ctf_slopes_null_one_param,
             t,

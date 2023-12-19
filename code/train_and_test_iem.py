@@ -179,8 +179,6 @@ def iem_one_timepoint(train_data, train_labels, test_data, test_labels):
 
     Returns
     -------
-    mean_channel_offset : np.ndarray
-        Array containing mean channel offset from fitted IEM.
     ctf_slope : np.ndarray
         Array containing CTF slope from fitted IEM.
     """
@@ -193,10 +191,9 @@ def iem_one_timepoint(train_data, train_labels, test_data, test_labels):
     # Test IEM using testing data
     iem.estimate_ctf(test_data, test_labels)
 
-    # Compute mean channel offset and CTF slope
-    iem.compute_mean_channel_offset()
+    # Compute mean CTF slope
     iem.compute_ctf_slope()
-    return iem.mean_channel_offset, iem.ctf_slope
+    return iem.ctf_slope
 
 
 def iem_one_block(
@@ -221,8 +218,6 @@ def iem_one_block(
 
     Returns
     -------
-    mean_channel_offset : np.ndarray
-        Array containing mean channel offset from fitted IEM.
     ctf_slope : np.ndarray
         Array containing CTF slope from fitted IEM.
     """
@@ -243,46 +238,8 @@ def iem_one_block(
     # Parallelize training and testing of IEM across time points
     with mp.Pool() as pool:
         pool_out = pool.starmap(iem_one_timepoint, args)
-    mean_channel_offset, ctf_slope = list(zip(*pool_out))
-    return np.array(mean_channel_offset).T, np.array(ctf_slope)
-
-
-def plot_channel_offset(channel_offset_arr, t_arr, save_fname=None):
-    """Plot channel offset across time.
-
-    Parameters
-    ----------
-    channel_offset_arr : np.ndarray
-        Array containing channel offset.
-    t_arr : np.ndarray
-        Array containing time points.
-    save_fname : str (default: None)
-        File name to save figure to.  If None, figure will not be saved.
-    """
-    # Initialize figure
-    plt.figure()
-
-    # Plot channel offset
-    offset_range = channel_offset_arr.shape[0]
-    offset_vals = np.linspace(
-        -offset_range // 2, offset_range // 2, num=offset_range
-    ).astype(int)
-    plt.pcolormesh(
-        t_arr, offset_vals, channel_offset_arr, cmap="YlGnBu_r", shading="auto"
-    )
-    plt.gca().invert_yaxis()
-
-    # Label axes
-    plt.xlabel("Time (s)")
-    plt.ylabel("Channel Offset")
-
-    # Add color bar
-    plt.colorbar(label="Channel Response")
-
-    # Save if desired
-    if save_fname:
-        plt.savefig(save_fname)
-    plt.close()
+    ctf_slope = list(zip(*pool_out))
+    return np.array(ctf_slope)
 
 
 def plot_ctf_slope(
@@ -536,8 +493,6 @@ def train_and_test_one_subj(
 
     Returns
     -------
-    mean_channel_offset : np.ndarray
-        Array containing mean channel offset across time.
     ctf_slope : np.ndarray
         Array containing CTF slope across time.
     times : np.ndarray
@@ -564,28 +519,18 @@ def train_and_test_one_subj(
         threshold_val=threshold_val,
     )
 
-    # Load channel offset data if already done
-    channel_offset_fname = f"{save_dir}/channel_offset_{subj}.npy"
+    # Load data if already done
     ctf_slope_fname = f"{save_dir}/ctf_slope_{subj}.npy"
     ctf_slope_null_fname = f"{save_dir}/ctf_slope_null_{subj}.npy"
 
-    if (
-        os.path.exists(channel_offset_fname)
-        and os.path.exists(ctf_slope_fname)
-        and os.path.exists(ctf_slope_null_fname)
+    if os.path.exists(ctf_slope_fname) and os.path.exists(
+        ctf_slope_null_fname
     ):
-        # Load offset array
-        mean_channel_offset = np.load(channel_offset_fname)
-
         # Load slope array
         mean_ctf_slope = np.load(ctf_slope_fname)
 
         # Load null slope array
         mean_ctf_slope_null = np.load(ctf_slope_null_fname)
-
-        # Plot channel offset and save
-        fig_fname = os.path.join(fig_dir, f"channel_offset_{subj}")
-        plot_channel_offset(mean_channel_offset, times, save_fname=fig_fname)
 
         # Print loading time if desired
         if verbose:
@@ -593,13 +538,10 @@ def train_and_test_one_subj(
                 f"Loading {param} data for {subj} took "
                 f"{time.time() - start:.3f} s"
             )
-        return mean_channel_offset, mean_ctf_slope, mean_ctf_slope_null, times
+        return mean_ctf_slope, mean_ctf_slope_null, times
 
     # Iterate through sets of blocks
     n_timepts = len(times)
-    channel_offsets = np.zeros(
-        (n_block_iters, n_blocks, IEM().feat_space_range, n_timepts)
-    )
     ctf_slope = np.zeros((n_block_iters, n_blocks, n_timepts))
     ctf_slope_null = np.zeros((n_block_iters, n_blocks, n_timepts))
     for block_iter in range(n_block_iters):
@@ -621,30 +563,23 @@ def train_and_test_one_subj(
             test_labels = IEM().channel_centers
 
             # Train IEMs for block of data, with no shuffle
-            (
-                channel_offsets[block_iter, test_block_num, :, :],
-                ctf_slope[block_iter, test_block_num, :],
-            ) = iem_one_block(train_data, train_labels, test_data, test_labels)
+            ctf_slope[block_iter, test_block_num, :] = iem_one_block(
+                train_data, train_labels, test_data, test_labels
+            )
 
             # Train IEMs for block of data, with shuffle
             train_labels_shuffled = np.random.permutation(train_labels)
-            _, ctf_slope_null[block_iter, test_block_num, :] = iem_one_block(
+            ctf_slope_null[block_iter, test_block_num, :] = iem_one_block(
                 train_data, train_labels_shuffled, test_data, test_labels
             )
 
     # Average across blocks and block iterations
-    mean_channel_offset = np.mean(channel_offsets, axis=(0, 1))
     mean_ctf_slope = np.mean(ctf_slope, axis=(0, 1))
     mean_ctf_slope_null = np.mean(ctf_slope_null, axis=(0, 1))
 
     # Save data to avoid unnecessary re-processing
-    np.save(channel_offset_fname, mean_channel_offset)
     np.save(ctf_slope_fname, mean_ctf_slope)
     np.save(ctf_slope_null_fname, mean_ctf_slope_null)
-
-    # Plot channel offset and save
-    fig_fname = os.path.join(fig_dir, f"channel_offset_{subj}")
-    plot_channel_offset(mean_channel_offset, times, save_fname=fig_fname)
 
     # Print processing time if desired
     if verbose:
@@ -652,7 +587,7 @@ def train_and_test_one_subj(
             f"Processing {param} data for {subj} took "
             f"{time.time() - start:.3f} s"
         )
-    return mean_channel_offset, mean_ctf_slope, mean_ctf_slope_null, times
+    return mean_ctf_slope, mean_ctf_slope_null, times
 
 
 def train_and_test_all_subjs(
@@ -661,7 +596,6 @@ def train_and_test_all_subjs(
     task_num=None,
     threshold_param=None,
     threshold_val=None,
-    fig_dir=params.FIG_DIR,
     subjects_by_task=params.SUBJECTS_BY_TASK,
 ):
     """Train and test for all subjects.
@@ -682,8 +616,6 @@ def train_and_test_all_subjs(
 
     Returns
     -------
-    mean_channel_offset_all_subjs : np.ndarray
-        Array containing mean channel offset across subjects.
     mean_ctf_slopes : np.ndarray
         Array containing CTF slopes across subjects.
     t_arr : np.ndarray
@@ -705,7 +637,6 @@ def train_and_test_all_subjs(
         subjects_by_task = [subjects_by_task[task_num]]
 
     # Initialize arrays to store data across subjects by experiment
-    mean_channel_offsets = [[] for _ in range(len(subjects_by_task))]
     mean_ctf_slopes = [[] for _ in range(len(subjects_by_task))]
     mean_ctf_slopes_null = [[] for _ in range(len(subjects_by_task))]
     t_arrays = [[] for _ in range(len(subjects_by_task))]
@@ -714,7 +645,6 @@ def train_and_test_all_subjs(
     for subj in subjs:
         # Train and test for one subject
         (
-            mean_channel_offset,
             mean_ctf_slope,
             mean_ctf_slope_null,
             t_arr,
@@ -734,16 +664,9 @@ def train_and_test_all_subjs(
                 for exp, ids in subjects_by_task
             ]
         )
-        mean_channel_offsets[task_num].append(mean_channel_offset)
         mean_ctf_slopes[task_num].append(mean_ctf_slope)
         mean_ctf_slopes_null[task_num].append(mean_ctf_slope_null)
         t_arrays[task_num] = t_arr
-
-    # Combine channel offsets across subjects
-    mean_channel_offset_all_subjs = [
-        np.mean(channel_offset, axis=0)
-        for channel_offset in mean_channel_offsets
-    ]
 
     # Collate CTF slopes across subjects
     mean_ctf_slopes = [np.array(ctf_slope) for ctf_slope in mean_ctf_slopes]
@@ -751,19 +674,7 @@ def train_and_test_all_subjs(
         np.array(ctf_slope_null) for ctf_slope_null in mean_ctf_slopes_null
     ]
 
-    # Plot channel offset across subjects
-    fig_dir = os.path.join(fig_dir, param)
-    if threshold_param is not None and threshold_val is not None:
-        fig_dir = os.path.join(fig_dir, f"{threshold_param}>{threshold_val}")
-    for i, (experiment, _) in enumerate(subjects_by_task):
-        fig_fname = os.path.join(
-            fig_dir, f"channel_offset_{experiment}_task{i}"
-        )
-        plot_channel_offset(
-            mean_channel_offset_all_subjs[i], t_arrays[i], save_fname=fig_fname
-        )
     return (
-        mean_channel_offsets,
         mean_ctf_slopes,
         mean_ctf_slopes_null,
         t_arrays,
