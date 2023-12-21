@@ -15,12 +15,86 @@ import params
 from iem import IEM
 
 
+def split_trials(
+    subj,
+    param_dir,
+    param,
+    t_window,
+    baseline_t_window=None,
+    operation="-",
+    channels=None,
+    bottom_pct=0.5,
+    top_pct=0.5,
+    task_timings=params.TASK_TIMINGS,
+    subjects_by_task=params.SUBJECTS_BY_TASK,
+):
+    "Split trials based on given criterion."
+    # Load parameterized data
+    epochs, times, _, param_data = load_param_data(subj, param, param_dir)
+
+    # Parse subject ID
+    experiment, subj_num = subj.split("_")
+    task_num = np.argmax(
+        [
+            exp == experiment and int(subj_num) in ids
+            for exp, ids in subjects_by_task
+        ]
+    )
+
+    windowed_data = []
+    for one_t_window in (baseline_t_window, t_window):
+        # Skip if no time window
+        if one_t_window is None:
+            continue
+
+        # Parse time window
+        if one_t_window == "baseline":
+            one_t_window = (times[0], 0.0)
+        elif one_t_window == "stimulus":
+            one_t_window = (0.0, task_timings[task_num][1])
+        elif one_t_window == "delay":
+            one_t_window = task_timings[task_num]
+        elif one_t_window == "response":
+            one_t_window = (task_timings[task_num][1], times[-1])
+
+        # Average across time window
+        t_window_idx = np.where(
+            (times >= one_t_window[0]) & (times <= one_t_window[1])
+        )[0]
+        windowed_data.append(np.mean(param_data[:, :, t_window_idx], axis=-1))
+
+    # Perform operation between time windows
+    processed_data = windowed_data[0]
+    if len(windowed_data) == 2:
+        if operation == "-":
+            processed_data = windowed_data[1] - windowed_data[0]
+        elif operation == "/":
+            processed_data = windowed_data[1] / windowed_data[0]
+
+    # Subset channels if desired
+    if channels is not None:
+        ch_mask = np.isin(epochs.ch_names, channels)
+        processed_data = processed_data[:, ch_mask]
+
+    # Average across channels
+    processed_data = np.mean(processed_data, axis=-1)
+
+    # Sort trials by parameterized data
+    sorted_idx = np.argsort(processed_data)
+
+    # Split trials into top and bottom percentiles
+    n_trials = len(sorted_idx)
+    n_bottom_trials = int(n_trials * bottom_pct)
+    n_top_trials = int(n_trials * top_pct)
+    trials_low = sorted_idx[:n_bottom_trials]
+    trials_high = sorted_idx[-n_top_trials:]
+    return trials_high, trials_low
+
+
 def load_param_data(
     subj,
     param,
     param_dir,
-    threshold_param=None,
-    threshold_val=None,
     processed_dir=params.PROCESSED_DIR,
     sparam_dir=params.SPARAM_DIR,
     decim_factor=params.DECIM_FACTOR,
@@ -33,10 +107,6 @@ def load_param_data(
         Subject ID.
     param : str
         Parameter to decode.
-    threshold_param : str | None (default: None)
-        Parameter to threshold.
-    threshold_val : float | None (default: None)
-        Threshold value.
     processed_dir : str (default: params.PROCESSED_DIR)
         Path to directory containing processed data.
     decim_factor : int (default: params.DECIM_FACTOR)
@@ -86,17 +156,6 @@ def load_param_data(
         os.path.join(param_dir, f"{subj}_{param}_epo.fif"), verbose=False
     ).get_data(copy=True)
     param_data = param_data[~beh_nan, :, :]
-
-    # Load parameterized data for threshold parameter
-    if threshold_param is not None and threshold_val is not None:
-        thresh_fname = os.path.join(
-            param_dir, f"{subj}_{threshold_param}_epo.fif"
-        )
-        thresh_data = mne.read_epochs(thresh_fname, verbose=False).get_data()
-        thresh_data = thresh_data[~beh_nan, :, :]
-        param_data = param_data[thresh_data >= threshold_val, :, :]
-        beh_data = beh_data[thresh_data >= threshold_val]
-        epochs.drop(thresh_data < threshold_val, verbose=False)
     return epochs, times, beh_data, param_data
 
 
@@ -381,7 +440,7 @@ def plot_ctf_slope_paired_ttest(
     ctf_slopes_dfs = []
     for i, (ctf_slope, t_arr) in enumerate(zip(ctf_slopes, t_arrays)):
         # If time window is None, use task timings
-        if t_window == "WM":
+        if t_window == "delay":
             t_window = task_timings[i]
 
         # Average across time window
@@ -460,12 +519,10 @@ def train_and_test_one_subj(
     subj,
     param,
     param_dir,
-    threshold_param=None,
-    threshold_val=None,
+    trial_split_criterion=None,
     n_blocks=params.N_BLOCKS,
     n_block_iters=params.N_BLOCK_ITERS,
-    save_dir=params.IEM_OUTPUT_DIR,
-    fig_dir=params.FIG_DIR,
+    output_dir=params.IEM_OUTPUT_DIR,
     verbose=True,
 ):
     """Train and test one subject.
@@ -476,19 +533,13 @@ def train_and_test_one_subj(
         Subject ID.
     param : str
         Parameter to use for decoding.
-    threshold_param : str (default: None)
-        Parameter to use for applying threshold.  If None, no threshold will be
-        applied.
-    threshold_val : float (default: None)
-        Value to use for threshold.  If None, no threshold will be applied.
+
     n_blocks : int (default: params.N_BLOCKS)
         Number of blocks to use for cross-validation.
     n_block_iters : int (default: params.N_BLOCK_ITERS)
         Number of iterations to use for cross-validation.
     save_dir : str (default: params.IEM_OUTPUT_DIR)
         Directory to save output to.
-    fig_dir : str (default: params.FIG_DIR)
-        Directory to save figures to.
 
     Returns
     -------
@@ -500,85 +551,110 @@ def train_and_test_one_subj(
     # Start timer
     start = time.time()
 
-    # Make directories specific to parameter
-    save_dir = os.path.join(save_dir, param)
-    fig_dir = os.path.join(fig_dir, param)
-    if threshold_param is not None and threshold_val is not None:
-        save_dir = os.path.join(save_dir, f"{threshold_param}>{threshold_val}")
-        fig_dir = os.path.join(fig_dir, f"{threshold_param}>{threshold_val}")
-    os.makedirs(save_dir, exist_ok=True)
-    os.makedirs(fig_dir, exist_ok=True)
-
     # Load parameterized data
     epochs, times, beh_data, param_data = load_param_data(
         subj,
         param,
         param_dir,
-        threshold_param=threshold_param,
-        threshold_val=threshold_val,
     )
 
-    # Load data if already done
-    ctf_slope_fname = f"{save_dir}/ctf_slope_{subj}.npy"
-    ctf_slope_null_fname = f"{save_dir}/ctf_slope_null_{subj}.npy"
-
-    if os.path.exists(ctf_slope_fname) and os.path.exists(
-        ctf_slope_null_fname
-    ):
-        # Load slope array
-        mean_ctf_slope = np.load(ctf_slope_fname)
-
-        # Load null slope array
-        mean_ctf_slope_null = np.load(ctf_slope_null_fname)
-
-        # Print loading time if desired
-        if verbose:
-            print(
-                f"Loading {param} data for {subj} took "
-                f"{time.time() - start:.3f} s"
-            )
-        return mean_ctf_slope, mean_ctf_slope_null, times
-
-    # Iterate through sets of blocks
-    n_timepts = len(times)
-    ctf_slope = np.zeros((n_block_iters, n_blocks, n_timepts))
-    ctf_slope_null = np.zeros((n_block_iters, n_blocks, n_timepts))
-    for block_iter in range(n_block_iters):
-        # Average parameterized data within trial blocks
-        param_arr = average_param_data_within_trial_blocks(
-            epochs, times, beh_data, param_data
+    # Split trials based on selection criteria
+    beh_data_set = (beh_data,)
+    param_data_set = (param_data,)
+    tags = ("",)
+    if trial_split_criterion is not None:
+        tags = ("high", "low")
+        trials_high, trials_low = split_trials(
+            subj, param_dir, **trial_split_criterion
         )
+        beh_data_set = (
+            beh_data[trials_high],
+            beh_data[trials_low],
+        )
+        param_data_set = (
+            param_data[trials_high],
+            param_data[trials_low],
+        )
+        split_param = trial_split_criterion["param"]
+        split_t_window = trial_split_criterion["t_window"]
+        split_baseline = None
+        if "baseline_t_window" in trial_split_criterion:
+            split_baseline = trial_split_criterion["baseline_t_window"]
+        output_dir = os.path.join(
+            output_dir, f"{split_param}_{split_t_window}"
+        )
+        if split_baseline is not None:
+            operation = "diff"
+            if "operation" in trial_split_criterion:
+                operation = trial_split_criterion["operation"]
+            output_dir = f"{output_dir}_{operation}_{split_baseline}"
 
-        # Iterate through blocks
-        for test_block_num in range(n_blocks):
-            # Split into training and testing data
-            train_data = np.delete(param_arr, test_block_num, axis=1).reshape(
-                param_arr.shape[0], -1, param_arr.shape[-1]
+    for tag, beh_data, param_data in zip(tags, beh_data_set, param_data_set):
+        # Make directories specific to parameter and trial split (if there is one)
+        save_dir = os.path.join(output_dir, param, tag)
+        os.makedirs(save_dir, exist_ok=True)
+
+        # Load data if already done
+        ctf_slope_fname = f"{save_dir}/ctf_slope_{subj}.npy"
+        ctf_slope_null_fname = f"{save_dir}/ctf_slope_null_{subj}.npy"
+
+        if os.path.exists(ctf_slope_fname) and os.path.exists(
+            ctf_slope_null_fname
+        ):
+            # Load slope array
+            mean_ctf_slope = np.load(ctf_slope_fname)
+
+            # Load null slope array
+            mean_ctf_slope_null = np.load(ctf_slope_null_fname)
+
+            # Print loading time if desired
+            if verbose:
+                print(
+                    f"Loading {param} data for {subj} took "
+                    f"{time.time() - start:.3f} s"
+                )
+            return mean_ctf_slope, mean_ctf_slope_null, times
+
+        # Iterate through sets of blocks
+        n_timepts = len(times)
+        ctf_slope = np.zeros((n_block_iters, n_blocks, n_timepts))
+        ctf_slope_null = np.zeros((n_block_iters, n_blocks, n_timepts))
+        for block_iter in range(n_block_iters):
+            # Average parameterized data within trial blocks
+            param_arr = average_param_data_within_trial_blocks(
+                epochs, times, beh_data, param_data
             )
-            test_data = param_arr[:, test_block_num, :, :]
 
-            # Create labels for training and testing
-            train_labels = np.tile(IEM().channel_centers, 2)
-            test_labels = IEM().channel_centers
+            # Iterate through blocks
+            for test_block_num in range(n_blocks):
+                # Split into training and testing data
+                train_data = np.delete(
+                    param_arr, test_block_num, axis=1
+                ).reshape(param_arr.shape[0], -1, param_arr.shape[-1])
+                test_data = param_arr[:, test_block_num, :, :]
 
-            # Train IEMs for block of data, with no shuffle
-            ctf_slope[block_iter, test_block_num, :] = iem_one_block(
-                train_data, train_labels, test_data, test_labels
-            )
+                # Create labels for training and testing
+                train_labels = np.tile(IEM().channel_centers, 2)
+                test_labels = IEM().channel_centers
 
-            # Train IEMs for block of data, with shuffle
-            train_labels_shuffled = np.random.permutation(train_labels)
-            ctf_slope_null[block_iter, test_block_num, :] = iem_one_block(
-                train_data, train_labels_shuffled, test_data, test_labels
-            )
+                # Train IEMs for block of data, with no shuffle
+                ctf_slope[block_iter, test_block_num, :] = iem_one_block(
+                    train_data, train_labels, test_data, test_labels
+                )
 
-    # Average across blocks and block iterations
-    mean_ctf_slope = np.mean(ctf_slope, axis=(0, 1))
-    mean_ctf_slope_null = np.mean(ctf_slope_null, axis=(0, 1))
+                # Train IEMs for block of data, with shuffle
+                train_labels_shuffled = np.random.permutation(train_labels)
+                ctf_slope_null[block_iter, test_block_num, :] = iem_one_block(
+                    train_data, train_labels_shuffled, test_data, test_labels
+                )
 
-    # Save data to avoid unnecessary re-processing
-    np.save(ctf_slope_fname, mean_ctf_slope)
-    np.save(ctf_slope_null_fname, mean_ctf_slope_null)
+        # Average across blocks and block iterations
+        mean_ctf_slope = np.mean(ctf_slope, axis=(0, 1))
+        mean_ctf_slope_null = np.mean(ctf_slope_null, axis=(0, 1))
+
+        # Save data to avoid unnecessary re-processing
+        np.save(ctf_slope_fname, mean_ctf_slope)
+        np.save(ctf_slope_null_fname, mean_ctf_slope_null)
 
     # Print processing time if desired
     if verbose:
@@ -593,9 +669,9 @@ def train_and_test_all_subjs(
     param,
     param_dir,
     task_num=None,
-    threshold_param=None,
-    threshold_val=None,
+    trial_split_criterion=None,
     subjects_by_task=params.SUBJECTS_BY_TASK,
+    output_dir=params.IEM_OUTPUT_DIR,
 ):
     """Train and test for all subjects.
 
@@ -605,11 +681,6 @@ def train_and_test_all_subjs(
         Parameter to use for decoding.
     param_dir : str
         Directory containing parameterized data.
-    threshold_param : str (default: None)
-        Parameter to use for threshold.  If None, no threshold will be
-        applied.
-    threshold_val : float (default: None)
-        Value to use for threshold.  If None, no threshold will be applied.
     fig_dir : str (default: params.FIG_DIR)
         Directory to save figures to.
 
@@ -656,8 +727,8 @@ def train_and_test_all_subjs(
             subj,
             param,
             param_dir,
-            threshold_param=threshold_param,
-            threshold_val=threshold_val,
+            trial_split_criterion=trial_split_criterion,
+            output_dir=output_dir,
         )
 
         # Add data to big arrays

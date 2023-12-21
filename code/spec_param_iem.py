@@ -21,7 +21,9 @@ from train_and_test_iem import (
 def fit_iem_all_params(
     sparam_dir=params.SPARAM_DIR,
     total_power_dir=params.TOTAL_POWER_DIR,
+    trial_split_criterion=None,
     verbose=True,
+    output_dir=params.IEM_OUTPUT_DIR,
 ):
     """Fit inverted encoding model (IEM) for total power and all parameters from
     spectral parameterization."""
@@ -32,11 +34,16 @@ def fit_iem_all_params(
 
     # Fit IEM for total power
     ctf_slopes_all_params, ctf_slopes_null_all_params = {}, {}
-    tot_pw_ctf_slopes, tot_pw_ctf_slopes_null, _ = train_and_test_all_subjs(
-        "total_power", total_power_dir
-    )
-    ctf_slopes_all_params["total_power"] = tot_pw_ctf_slopes
-    ctf_slopes_null_all_params["total_power"] = tot_pw_ctf_slopes_null
+    if total_power_dir is not None:
+        (
+            tot_pw_ctf_slopes,
+            tot_pw_ctf_slopes_null,
+            _,
+        ) = train_and_test_all_subjs(
+            "total_power", total_power_dir, output_dir=output_dir
+        )
+        ctf_slopes_all_params["total_power"] = tot_pw_ctf_slopes
+        ctf_slopes_null_all_params["total_power"] = tot_pw_ctf_slopes_null
 
     # Fit IEM for all parameters from spectral parameterization
     for sp_param in sp_params:
@@ -46,7 +53,12 @@ def fit_iem_all_params(
             ctf_slopes_one_param,
             ctf_slopes_null_one_param,
             t,
-        ) = train_and_test_all_subjs(sp_param, sparam_dir)
+        ) = train_and_test_all_subjs(
+            sp_param,
+            sparam_dir,
+            trial_split_criterion=trial_split_criterion,
+            output_dir=output_dir,
+        )
         ctf_slopes_all_params[sp_param] = ctf_slopes_one_param
         ctf_slopes_null_all_params[sp_param] = ctf_slopes_null_one_param
         if verbose:
@@ -229,7 +241,7 @@ def plot_paired_ttests(ctf_slopes_all_params, ctf_slopes_null_all_params, t):
     plot_ctf_slope_paired_ttest(
         ctf_slopes_all_params["PW"],
         t,
-        "WM",
+        "delay",
         ctf_slopes_shuffled=ctf_slopes_null_all_params["PW"],
         palette=(cmap(1), cmap(0)),
         save_fname=pw_ctf_slope_fname,

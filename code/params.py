@@ -10,6 +10,7 @@ TOTAL_POWER_DIR = f"{DATA_DIR}/total_power"
 SPARAM_DIR = f"{DATA_DIR}/sparam"
 SPARAM_DIFF_DIR = f"{DATA_DIR}/sparam_diff"
 IEM_OUTPUT_DIR = f"{DATA_DIR}/iem_output"
+TRIAL_SPLIT_DIR = f"{DATA_DIR}/trial_split"
 FIG_DIR = "figs"
 
 # Experiment variable
