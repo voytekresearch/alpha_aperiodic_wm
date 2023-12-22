@@ -2,9 +2,8 @@
 
 #SBATCH --job-name=trial_split
 #SBATCH --nodes=1
-#SBATCH --exclusive
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=68
+#SBATCH --cpus-per-task=1
 #SBATCH --mem-per-cpu=2G
 #SBATCH --output=trial_split.out
 #SBATCH --mail-type=ALL

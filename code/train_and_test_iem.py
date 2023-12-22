@@ -302,7 +302,7 @@ def iem_one_block(
 
 def plot_ctf_slope(
     ctf_slopes,
-    t_arr,
+    t_arrays,
     task_num,
     task_timings,
     ctf_slopes_shuffled=None,
@@ -332,9 +332,11 @@ def plot_ctf_slope(
     ctf_slopes_dfs = []
 
     # Make DataFrame of CTF slopes by time for each parameter
-    for param, ctf_slopes_one_param in ctf_slopes.items():
+    for t_one_param, (param, ctf_slopes_one_param) in zip(
+        t_arrays.values(), ctf_slopes.items()
+    ):
         n = ctf_slopes_one_param.shape[0]
-        one_param_df = pd.DataFrame(ctf_slopes_one_param, columns=t_arr)
+        one_param_df = pd.DataFrame(ctf_slopes_one_param, columns=t_one_param)
         one_param_df["Parameter"] = param
         one_param_df = one_param_df.melt(
             id_vars=["Parameter"], var_name="Time (s)", value_name="CTF slope"
@@ -344,7 +346,7 @@ def plot_ctf_slope(
         # Add DataFrame of CTF slopes for shuffled location labels if desired
         if ctf_slopes_shuffled is not None:
             one_param_df_shuffled = pd.DataFrame(
-                ctf_slopes_shuffled[param], columns=t_arr
+                ctf_slopes_shuffled[param], columns=t_one_param
             )
             one_param_df_shuffled["Parameter"] = param
             one_param_df_shuffled = one_param_df_shuffled.melt(

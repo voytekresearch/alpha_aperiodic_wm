@@ -33,17 +33,20 @@ def fit_iem_all_params(
     }
 
     # Fit IEM for total power
-    ctf_slopes_all_params, ctf_slopes_null_all_params = {}, {}
+    ctf_slopes_all_params = {}
+    ctf_slopes_null_all_params = {}
+    t_all_params = {}
     if total_power_dir is not None:
         (
             tot_pw_ctf_slopes,
             tot_pw_ctf_slopes_null,
-            _,
+            tot_pw_t,
         ) = train_and_test_all_subjs(
             "total_power", total_power_dir, output_dir=output_dir
         )
         ctf_slopes_all_params["total_power"] = tot_pw_ctf_slopes
         ctf_slopes_null_all_params["total_power"] = tot_pw_ctf_slopes_null
+        t_all_params["total_power"] = tot_pw_t
 
     # Fit IEM for all parameters from spectral parameterization
     for sp_param in sp_params:
@@ -61,15 +64,16 @@ def fit_iem_all_params(
         )
         ctf_slopes_all_params[sp_param] = ctf_slopes_one_param
         ctf_slopes_null_all_params[sp_param] = ctf_slopes_null_one_param
+        t_all_params[sp_param] = t
         if verbose:
             print(f"Fit IEMs for {sp_param} in {time.time() - start:.2f} s")
-    return ctf_slopes_all_params, ctf_slopes_null_all_params, t
+    return ctf_slopes_all_params, ctf_slopes_null_all_params, t_all_params
 
 
 def plot_ctf_slope_time_courses(
     ctf_slopes_all_params,
     ctf_slopes_null_all_params,
-    t,
+    t_all_params,
     param_sets=None,
     palettes=None,
     name="",
@@ -100,6 +104,7 @@ def plot_ctf_slope_time_courses(
         ctf_slopes_shuffled = {
             k: v[task_num] for k, v in ctf_slopes_null_all_params.items()
         }
+        t = {k: v[task_num] for k, v in t_all_params.items()}
 
         # Get the corresponding subplot from the GridSpec
         ax = fig.add_subplot(gs[task_num % 2, task_num // 2])
@@ -113,12 +118,13 @@ def plot_ctf_slope_time_courses(
             ctf_slopes_shuffled_one_param_set = {
                 k: v for k, v in ctf_slopes_shuffled.items() if k in param_set
             }
+            t_one_param_set = {k: v for k, v in t.items() if k in param_set}
 
             # Plot CTF slope time courses for parameter set and palette
             plt_timings = i == len(param_sets) - 1
             plot_ctf_slope(
                 ctf_slopes_one_param_set,
-                t[task_num],
+                t_one_param_set,
                 task_num,
                 task_timings=task_timings[task_num],
                 ctf_slopes_shuffled=ctf_slopes_shuffled_one_param_set,
@@ -153,7 +159,7 @@ def plot_ctf_slope_time_courses(
 def compare_params_ctf_time_courses(
     ctf_slopes_all_params,
     ctf_slopes_null_all_params,
-    t,
+    t_all_params,
 ):
     """Compare CTF slope time courses for different parameters from spectral
     parameterization model."""
@@ -205,7 +211,7 @@ def compare_params_ctf_time_courses(
         plot_ctf_slope_time_courses(
             ctf_slopes_all_params,
             ctf_slopes_null_all_params,
-            t,
+            t_all_params,
             param_sets=comp_set,
             palettes=[
                 cmr.take_cmap_colors(
@@ -220,7 +226,9 @@ def compare_params_ctf_time_courses(
         )
 
 
-def plot_paired_ttests(ctf_slopes_all_params, ctf_slopes_null_all_params, t):
+def plot_paired_ttests(
+    ctf_slopes_all_params, ctf_slopes_null_all_params, t_all_params
+):
     """Plot paired t-tests of CTF slopes for desired parameters from spectral
     parameterization model."""
     # Plot paired t-tests of CTF slopes for the aperiodic exponent in first
@@ -229,7 +237,7 @@ def plot_paired_ttests(ctf_slopes_all_params, ctf_slopes_null_all_params, t):
     cmap = plt.get_cmap("Paired")
     plot_ctf_slope_paired_ttest(
         ctf_slopes_all_params["exponent"],
-        t,
+        t_all_params["exponent"],
         (0.0, 0.4),
         ctf_slopes_shuffled=ctf_slopes_null_all_params["exponent"],
         palette=(cmap(3), cmap(2)),
@@ -240,7 +248,7 @@ def plot_paired_ttests(ctf_slopes_all_params, ctf_slopes_null_all_params, t):
     pw_ctf_slope_fname = f"{params.FIG_DIR}/pw_ctf_slope_paired_t-test.png"
     plot_ctf_slope_paired_ttest(
         ctf_slopes_all_params["PW"],
-        t,
+        t_all_params["PW"],
         "delay",
         ctf_slopes_shuffled=ctf_slopes_null_all_params["PW"],
         palette=(cmap(1), cmap(0)),
