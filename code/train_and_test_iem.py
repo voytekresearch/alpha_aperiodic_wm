@@ -305,7 +305,9 @@ def plot_ctf_slope(
     t_arrays,
     task_num,
     task_timings,
-    ctf_slopes_shuffled=None,
+    ctf_slopes_contrast=None,
+    contrast_label="Shuffled location labels?",
+    contrast_vals=("No", "Yes"),
     palette=None,
     save_fname=None,
     plot_timings=True,
@@ -341,22 +343,22 @@ def plot_ctf_slope(
         one_param_df = one_param_df.melt(
             id_vars=["Parameter"], var_name="Time (s)", value_name="CTF slope"
         )
-        one_param_df["Shuffled location labels?"] = "No"
+        one_param_df[contrast_label] = contrast_vals[0]
 
         # Add DataFrame of CTF slopes for shuffled location labels if desired
-        if ctf_slopes_shuffled is not None:
-            one_param_df_shuffled = pd.DataFrame(
-                ctf_slopes_shuffled[param], columns=t_one_param
+        if ctf_slopes_contrast is not None:
+            one_param_df_contrast = pd.DataFrame(
+                ctf_slopes_contrast[param], columns=t_one_param
             )
-            one_param_df_shuffled["Parameter"] = param
-            one_param_df_shuffled = one_param_df_shuffled.melt(
+            one_param_df_contrast["Parameter"] = param
+            one_param_df_contrast = one_param_df_contrast.melt(
                 id_vars=["Parameter"],
                 var_name="Time (s)",
                 value_name="CTF slope",
             )
-            one_param_df_shuffled["Shuffled location labels?"] = "Yes"
+            one_param_df_contrast[contrast_label] = contrast_vals[1]
             one_param_df = pd.concat(
-                (one_param_df, one_param_df_shuffled), axis=0
+                (one_param_df, one_param_df_contrast), axis=0
             )
         ctf_slopes_dfs.append(one_param_df)
 
@@ -373,7 +375,7 @@ def plot_ctf_slope(
         hue="Parameter",
         x="Time (s)",
         y="CTF slope",
-        style="Shuffled location labels?",
+        style=contrast_label,
         palette=palette,
         legend="brief",
         ci=ci,
