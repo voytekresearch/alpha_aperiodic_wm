@@ -18,7 +18,8 @@ from train_and_test_iem import (
 )
 
 
-def fit_iem_all_params(
+def fit_iem_desired_params(
+    sp_params="all",
     sparam_dir=params.SPARAM_DIR,
     total_power_dir=params.TOTAL_POWER_DIR,
     trial_split_criterion=None,
@@ -28,9 +29,12 @@ def fit_iem_all_params(
     """Fit inverted encoding model (IEM) for total power and all parameters from
     spectral parameterization."""
     # Determine all parameters to fit IEM for
-    sp_params = {
-        f.split("_")[-2] for f in os.listdir(sparam_dir) if f.endswith(".fif")
-    }
+    if sp_params == "all":
+        sp_params = {
+            f.split("_")[-2]
+            for f in os.listdir(sparam_dir)
+            if f.endswith(".fif")
+        }
 
     # Fit IEM for total power
     ctf_slopes_all_params = {}
@@ -127,7 +131,7 @@ def plot_ctf_slope_time_courses(
                 t_one_param_set,
                 task_num,
                 task_timings=task_timings[task_num],
-                ctf_slopes_shuffled=ctf_slopes_shuffled_one_param_set,
+                ctf_slopes_contrast=ctf_slopes_shuffled_one_param_set,
                 palette=palette,
                 plot_timings=plt_timings,
                 plot_errorbars=False,
@@ -259,7 +263,9 @@ def plot_paired_ttests(
 if __name__ == "__main__":
     # Fit IEM for total power and all parameters from spectral parameterization
     # model
-    ctf_slopes, ctf_slopes_null, t_arrays = fit_iem_all_params(verbose=False)
+    ctf_slopes, ctf_slopes_null, t_arrays = fit_iem_desired_params(
+        verbose=False
+    )
 
     # Plot CTF slope time courses for all parameters from spectral
     # parameterization model

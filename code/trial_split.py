@@ -1,23 +1,49 @@
 """Split trials based on selection criteria and re-train IEMs on those trial 
 splits."""
 # Import necessary modules
-from spec_param_iem import fit_iem_all_params, compare_params_ctf_time_courses
+import os
+import numpy as np
+from spec_param_iem import (
+    fit_iem_desired_params,
+    plot_ctf_slope_time_courses,
+)
 import params
 
 if __name__ == "__main__":
+    # Get all parameters from spectral parameterization
+    sp_params = {
+        f.split("_")[-2]
+        for f in os.listdir(params.SPARAM_DIR)
+        if f.endswith(".fif")
+    }
+    auc_params = [p for p in sp_params if "AUC" in p]
+
     # Split trials based on exponent change
     exponent_change_dct = {
         "param": "exponent",
         "t_window": "delay",
         "baseline_t_window": "baseline",
     }
-    ctf_slopes_exp_change, ctf_slopes_null_exp_change, t = fit_iem_all_params(
+    (
+        ctf_slopes_exp_change,
+        ctf_slopes_null_exp_change,
+        t,
+    ) = fit_iem_desired_params(
+        sp_params=auc_params,
         total_power_dir=None,
         output_dir=params.TRIAL_SPLIT_DIR,
         trial_split_criterion=exponent_change_dct,
     )
 
     # Plot CTF slopes for exponent change
-    compare_params_ctf_time_courses(
-        ctf_slopes_exp_change, ctf_slopes_null_exp_change, t
+    high_exp_change = {
+        k: [np.array([s["high"] for s in task]) for task in v]
+        for k, v in ctf_slopes_exp_change.items()
+    }
+    low_exp_change = {
+        k: [np.array([s["low"] for s in task]) for task in v]
+        for k, v in ctf_slopes_exp_change.items()
+    }
+    plot_ctf_slope_time_courses(
+        high_exp_change, low_exp_change, t, title="Exponent Change"
     )
