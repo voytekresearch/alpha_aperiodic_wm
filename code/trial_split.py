@@ -16,8 +16,7 @@ if __name__ == "__main__":
         for f in os.listdir(params.SPARAM_DIR)
         if f.endswith(".fif")
     }
-    auc_params = [p for p in sp_params if "AUC" in p]
-
+    lin_osc_auc_params = [p for p in sp_params if "linOscAUC" in p]
     # Split trials based on exponent change
     exponent_change_dct = {
         "param": "exponent",
@@ -29,7 +28,7 @@ if __name__ == "__main__":
         ctf_slopes_null_exp_change,
         t,
     ) = fit_iem_desired_params(
-        sp_params=auc_params,
+        sp_params=lin_osc_auc_params,
         total_power_dir=None,
         output_dir=params.TRIAL_SPLIT_DIR,
         trial_split_criterion=exponent_change_dct,
@@ -45,5 +44,11 @@ if __name__ == "__main__":
         for k, v in ctf_slopes_exp_change.items()
     }
     plot_ctf_slope_time_courses(
-        high_exp_change, low_exp_change, t, title="Exponent Change"
+        high_exp_change,
+        t,
+        ctf_slopes_contrast=low_exp_change,
+        contrast_label="Exponent Change?",
+        contrast_vals=["Bottom 50%", "Top 50%"],
+        title="Exponent Change",
+        name="exp_change",
     )
