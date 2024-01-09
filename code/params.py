@@ -10,6 +10,7 @@ TOTAL_POWER_DIR = f"{DATA_DIR}/total_power"
 SPARAM_DIR = f"{DATA_DIR}/sparam"
 SPARAM_DIFF_DIR = f"{DATA_DIR}/sparam_diff"
 IEM_OUTPUT_DIR = f"{DATA_DIR}/iem_output"
+TRIAL_SPLIT_DIR = f"{DATA_DIR}/trial_split"
 FIG_DIR = "figs"
 
 # Experiment variable
@@ -119,7 +120,7 @@ FMIN = 2  # Hz
 FMAX = 50  # Hz
 N_FREQS = 128
 TIME_WINDOW_LEN = 1.0  # s
-DECIM_FACTOR = 8  # decimation/downsampling factor
+DECIM_FACTOR = 1  # decimation/downsampling factor
 N_PEAKS = 4
 PEAK_WIDTH_LIMS = (2, 8)
 

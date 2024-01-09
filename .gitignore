@@ -4,3 +4,4 @@ __pycache__
 .env
 figs/*
 .DS_Store
+code/*.sh

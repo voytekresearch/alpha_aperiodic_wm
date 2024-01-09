@@ -18,25 +18,39 @@ from train_and_test_iem import (
 )
 
 
-def fit_iem_all_params(
+def fit_iem_desired_params(
+    sp_params="all",
     sparam_dir=params.SPARAM_DIR,
     total_power_dir=params.TOTAL_POWER_DIR,
+    trial_split_criterion=None,
     verbose=True,
+    output_dir=params.IEM_OUTPUT_DIR,
 ):
     """Fit inverted encoding model (IEM) for total power and all parameters from
     spectral parameterization."""
     # Determine all parameters to fit IEM for
-    sp_params = {
-        f.split("_")[-2] for f in os.listdir(sparam_dir) if f.endswith(".fif")
-    }
+    if sp_params == "all":
+        sp_params = {
+            f.split("_")[-2]
+            for f in os.listdir(sparam_dir)
+            if f.endswith(".fif")
+        }
 
     # Fit IEM for total power
-    ctf_slopes_all_params, ctf_slopes_null_all_params = {}, {}
-    tot_pw_ctf_slopes, tot_pw_ctf_slopes_null, _ = train_and_test_all_subjs(
-        "total_power", total_power_dir
-    )
-    ctf_slopes_all_params["total_power"] = tot_pw_ctf_slopes
-    ctf_slopes_null_all_params["total_power"] = tot_pw_ctf_slopes_null
+    ctf_slopes_all_params = {}
+    ctf_slopes_null_all_params = {}
+    t_all_params = {}
+    if total_power_dir is not None:
+        (
+            tot_pw_ctf_slopes,
+            tot_pw_ctf_slopes_null,
+            tot_pw_t,
+        ) = train_and_test_all_subjs(
+            "total_power", total_power_dir, output_dir=output_dir
+        )
+        ctf_slopes_all_params["total_power"] = tot_pw_ctf_slopes
+        ctf_slopes_null_all_params["total_power"] = tot_pw_ctf_slopes_null
+        t_all_params["total_power"] = tot_pw_t
 
     # Fit IEM for all parameters from spectral parameterization
     for sp_param in sp_params:
@@ -46,22 +60,30 @@ def fit_iem_all_params(
             ctf_slopes_one_param,
             ctf_slopes_null_one_param,
             t,
-        ) = train_and_test_all_subjs(sp_param, sparam_dir)
+        ) = train_and_test_all_subjs(
+            sp_param,
+            sparam_dir,
+            trial_split_criterion=trial_split_criterion,
+            output_dir=output_dir,
+        )
         ctf_slopes_all_params[sp_param] = ctf_slopes_one_param
         ctf_slopes_null_all_params[sp_param] = ctf_slopes_null_one_param
+        t_all_params[sp_param] = t
         if verbose:
             print(f"Fit IEMs for {sp_param} in {time.time() - start:.2f} s")
-    return ctf_slopes_all_params, ctf_slopes_null_all_params, t
+    return ctf_slopes_all_params, ctf_slopes_null_all_params, t_all_params
 
 
 def plot_ctf_slope_time_courses(
     ctf_slopes_all_params,
-    ctf_slopes_null_all_params,
-    t,
+    t_all_params,
     param_sets=None,
     palettes=None,
     name="",
     title="",
+    ctf_slopes_contrast=None,
+    contrast_label=None,
+    contrast_vals=None,
     subjects_by_task=params.SUBJECTS_BY_TASK,
     fig_dir=params.FIG_DIR,
     task_timings=params.TASK_TIMINGS,
@@ -85,9 +107,10 @@ def plot_ctf_slope_time_courses(
         ctf_slopes_one_task = {
             k: v[task_num] for k, v in ctf_slopes_all_params.items()
         }
-        ctf_slopes_shuffled = {
-            k: v[task_num] for k, v in ctf_slopes_null_all_params.items()
+        ctf_slopes_contrast_one_task = {
+            k: v[task_num] for k, v in ctf_slopes_contrast.items()
         }
+        t = {k: v[task_num] for k, v in t_all_params.items()}
 
         # Get the corresponding subplot from the GridSpec
         ax = fig.add_subplot(gs[task_num % 2, task_num // 2])
@@ -98,22 +121,32 @@ def plot_ctf_slope_time_courses(
             ctf_slopes_one_param_set = {
                 k: v for k, v in ctf_slopes_one_task.items() if k in param_set
             }
-            ctf_slopes_shuffled_one_param_set = {
-                k: v for k, v in ctf_slopes_shuffled.items() if k in param_set
+            ctf_slopes_contrast_one_param_set = {
+                k: v
+                for k, v in ctf_slopes_contrast_one_task.items()
+                if k in param_set
             }
+            t_one_param_set = {k: v for k, v in t.items() if k in param_set}
 
             # Plot CTF slope time courses for parameter set and palette
             plt_timings = i == len(param_sets) - 1
+            kwargs = {
+                "ctf_slopes_contrast": ctf_slopes_contrast_one_param_set,
+                "palette": palette,
+                "plot_timings": plt_timings,
+                "plot_errorbars": False,
+                "ax": ax,
+            }
+            if contrast_label is not None:
+                kwargs["contrast_label"] = contrast_label
+            if contrast_vals is not None:
+                kwargs["contrast_vals"] = contrast_vals
             plot_ctf_slope(
                 ctf_slopes_one_param_set,
-                t[task_num],
+                t_one_param_set,
                 task_num,
-                task_timings=task_timings[task_num],
-                ctf_slopes_shuffled=ctf_slopes_shuffled_one_param_set,
-                palette=palette,
-                plot_timings=plt_timings,
-                plot_errorbars=False,
-                ax=ax,
+                task_timings[task_num],
+                **kwargs,
             )
 
     # Get legend handles and labels from last axis
@@ -141,7 +174,7 @@ def plot_ctf_slope_time_courses(
 def compare_params_ctf_time_courses(
     ctf_slopes_all_params,
     ctf_slopes_null_all_params,
-    t,
+    t_all_params,
 ):
     """Compare CTF slope time courses for different parameters from spectral
     parameterization model."""
@@ -192,8 +225,8 @@ def compare_params_ctf_time_courses(
     ):
         plot_ctf_slope_time_courses(
             ctf_slopes_all_params,
-            ctf_slopes_null_all_params,
-            t,
+            t_all_params,
+            ctf_slopes_contrast=ctf_slopes_null_all_params,
             param_sets=comp_set,
             palettes=[
                 cmr.take_cmap_colors(
@@ -208,7 +241,9 @@ def compare_params_ctf_time_courses(
         )
 
 
-def plot_paired_ttests(ctf_slopes_all_params, ctf_slopes_null_all_params, t):
+def plot_paired_ttests(
+    ctf_slopes_all_params, ctf_slopes_null_all_params, t_all_params
+):
     """Plot paired t-tests of CTF slopes for desired parameters from spectral
     parameterization model."""
     # Plot paired t-tests of CTF slopes for the aperiodic exponent in first
@@ -217,7 +252,7 @@ def plot_paired_ttests(ctf_slopes_all_params, ctf_slopes_null_all_params, t):
     cmap = plt.get_cmap("Paired")
     plot_ctf_slope_paired_ttest(
         ctf_slopes_all_params["exponent"],
-        t,
+        t_all_params["exponent"],
         (0.0, 0.4),
         ctf_slopes_shuffled=ctf_slopes_null_all_params["exponent"],
         palette=(cmap(3), cmap(2)),
@@ -228,8 +263,8 @@ def plot_paired_ttests(ctf_slopes_all_params, ctf_slopes_null_all_params, t):
     pw_ctf_slope_fname = f"{params.FIG_DIR}/pw_ctf_slope_paired_t-test.png"
     plot_ctf_slope_paired_ttest(
         ctf_slopes_all_params["PW"],
-        t,
-        "WM",
+        t_all_params["PW"],
+        "delay",
         ctf_slopes_shuffled=ctf_slopes_null_all_params["PW"],
         palette=(cmap(1), cmap(0)),
         save_fname=pw_ctf_slope_fname,
@@ -239,12 +274,17 @@ def plot_paired_ttests(ctf_slopes_all_params, ctf_slopes_null_all_params, t):
 if __name__ == "__main__":
     # Fit IEM for total power and all parameters from spectral parameterization
     # model
-    ctf_slopes, ctf_slopes_null, t_arrays = fit_iem_all_params(verbose=False)
+    ctf_slopes, ctf_slopes_null, t_arrays = fit_iem_desired_params(
+        verbose=False
+    )
 
     # Plot CTF slope time courses for all parameters from spectral
     # parameterization model
     plot_ctf_slope_time_courses(
-        ctf_slopes, ctf_slopes_null, t_arrays, title="All parameters"
+        ctf_slopes,
+        t_arrays,
+        ctf_slopes_contrast=ctf_slopes_null,
+        title="All parameters",
     )
 
     # Plot CTF slope time courses for relevant comparisons of parameters from
