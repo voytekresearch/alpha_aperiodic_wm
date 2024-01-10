@@ -3,7 +3,7 @@ splits."""
 # Import necessary modules
 import os
 import numpy as np
-from spec_param_iem import fit_iem_desired_params
+from train_and_test_iem import fit_iem_desired_params
 from plot_iem_results import plot_ctf_slope_time_courses
 import params
 

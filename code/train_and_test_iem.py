@@ -509,10 +509,32 @@ def load_one_subj(
     return mean_ctf_slope, mean_ctf_slope_null, times
 
 
+def _get_subject_list(
+    param, param_dir, subjects_by_task=params.SUBJECTS_BY_TASK
+):
+    # Get all subject IDs that were processed
+    subjs_processed = sorted(
+        [
+            "_".join(f.split("_")[:2])
+            for f in os.listdir(param_dir)
+            if f"_{param}_" in f
+        ]
+    )
+
+    # Get all subject IDs for IEMs, excluding those that were not
+    # processed or excluded
+    subjs = []
+    for experiment, subj_ids in subjects_by_task:
+        subjs.extend(
+            ["_".join((experiment, str(subj_id))) for subj_id in subj_ids]
+        )
+    subjs = sorted(list(set(subjs) & set(subjs_processed)))
+    return subjs
+
+
 def train_and_test_all_subjs(
     param,
     param_dir,
-    task_num=None,
     trial_split_criterion=None,
     subjects_by_task=params.SUBJECTS_BY_TASK,
     output_dir=params.IEM_OUTPUT_DIR,
@@ -535,25 +557,9 @@ def train_and_test_all_subjs(
     t_arr : np.ndarray
         Array containing time points.
     """
-    # Get all subject IDs that were processed
-    subjs_processed = sorted(
-        [
-            "_".join(f.split("_")[:2])
-            for f in os.listdir(param_dir)
-            if f"_{param}_" in f
-        ]
-    )
-
     # Get all subject IDs for IEMs, excluding those that were not
     # processed or excluded
-    if task_num is not None:
-        subjects_by_task = [subjects_by_task[task_num]]
-    subjs = []
-    for experiment, subj_ids in subjects_by_task:
-        subjs.extend(
-            ["_".join((experiment, str(subj_id))) for subj_id in subj_ids]
-        )
-    subjs = sorted(list(set(subjs) & set(subjs_processed)))
+    subjs = _get_subject_list(param, param_dir)
 
     # Process each subject's data
     for subj in subjs:
@@ -565,6 +571,36 @@ def train_and_test_all_subjs(
             trial_split_criterion=trial_split_criterion,
             output_dir=output_dir,
         )
+
+
+def load_all_fit_iems(
+    param,
+    param_dir,
+    trial_split_criterion=None,
+    subjects_by_task=params.SUBJECTS_BY_TASK,
+    output_dir=params.IEM_OUTPUT_DIR,
+):
+    """Load IEM fits for all subjects.
+
+    Parameters
+    ----------
+    param : str
+        Parameter to use for decoding.
+    param_dir : str
+        Directory containing parameterized data.
+    fig_dir : str (default: params.FIG_DIR)
+        Directory to save figures to.
+
+    Returns
+    -------
+    mean_ctf_slopes : np.ndarray
+        Array containing CTF slopes across subjects.
+    t_arr : np.ndarray
+        Array containing time points.
+    """
+    # Get all subject IDs for IEMs, excluding those that were not
+    # processed or excluded
+    subjs = _get_subject_list(param, param_dir)
 
     # Collate CTF slopes across subjects
     mean_ctf_slopes = [[] for _ in range(len(subjects_by_task))]
@@ -601,3 +637,74 @@ def train_and_test_all_subjs(
         mean_ctf_slopes_null,
         t_arrays,
     )
+
+
+def fit_iem_desired_params(
+    sp_params="all",
+    sparam_dir=params.SPARAM_DIR,
+    total_power_dir=params.TOTAL_POWER_DIR,
+    trial_split_criterion=None,
+    verbose=True,
+    output_dir=params.IEM_OUTPUT_DIR,
+):
+    """Fit inverted encoding model (IEM) for total power and all parameters from
+    spectral parameterization."""
+    # Determine all parameters to fit IEM for
+    if sp_params == "all":
+        sp_params = {
+            f.split("_")[-2]
+            for f in os.listdir(sparam_dir)
+            if f.endswith(".fif")
+        }
+
+    # Fit IEMs for total power
+    if total_power_dir is not None:
+        train_and_test_all_subjs(
+            "total_power", total_power_dir, output_dir=output_dir
+        )
+
+    # Fit IEMs for all parameters from spectral parameterization
+    for sp_param in sp_params:
+        # Start timer
+        start = time.time()
+        train_and_test_all_subjs(
+            sp_param,
+            sparam_dir,
+            trial_split_criterion=trial_split_criterion,
+            output_dir=output_dir,
+        )
+        if verbose:
+            print(f"Fit IEMs for {sp_param} in {time.time() - start:.2f} s")
+
+    # Fit IEM for total power
+    ctf_slopes_all_params = {}
+    ctf_slopes_null_all_params = {}
+    t_all_params = {}
+    if total_power_dir is not None:
+        (
+            tot_pw_ctf_slopes,
+            tot_pw_ctf_slopes_null,
+            tot_pw_t,
+        ) = load_all_fit_iems(
+            "total_power", total_power_dir, output_dir=output_dir
+        )
+        ctf_slopes_all_params["total_power"] = tot_pw_ctf_slopes
+        ctf_slopes_null_all_params["total_power"] = tot_pw_ctf_slopes_null
+        t_all_params["total_power"] = tot_pw_t
+
+    # Load fit IEMs for all parameters from spectral parameterization
+    for sp_param in sp_params:
+        (
+            ctf_slopes_one_param,
+            ctf_slopes_null_one_param,
+            t,
+        ) = load_all_fit_iems(
+            sp_param,
+            sparam_dir,
+            trial_split_criterion=trial_split_criterion,
+            output_dir=output_dir,
+        )
+        ctf_slopes_all_params[sp_param] = ctf_slopes_one_param
+        ctf_slopes_null_all_params[sp_param] = ctf_slopes_null_one_param
+        t_all_params[sp_param] = t
+    return ctf_slopes_all_params, ctf_slopes_null_all_params, t_all_params
