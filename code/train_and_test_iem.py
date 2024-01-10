@@ -575,6 +575,7 @@ def train_and_test_all_subjs(
         mean_ctf_slope, mean_ctf_slope_null, t_arr = load_one_subj(
             subj,
             param,
+            param_dir,
             trial_split_criterion=trial_split_criterion,
             output_dir=output_dir,
         )
