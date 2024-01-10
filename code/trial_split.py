@@ -20,8 +20,11 @@ if __name__ == "__main__":
     # Split trials based on exponent change
     exponent_change_dct = {
         "param": "exponent",
-        "t_window": "delay",
+        "t_window": "stimulus",
         "baseline_t_window": "baseline",
+        "bottom_frac": 0.25,
+        "top_frac": 0.25,
+        "channels": ("O1", "O2"),
     }
     (
         ctf_slopes_exp_change,
@@ -48,7 +51,7 @@ if __name__ == "__main__":
         t,
         ctf_slopes_contrast=low_exp_change,
         contrast_label="Exponent Change?",
-        contrast_vals=["Bottom 50%", "Top 50%"],
+        contrast_vals=["Bottom 25%", "Top 25%"],
         title="Exponent Change",
         name="exp_change",
     )

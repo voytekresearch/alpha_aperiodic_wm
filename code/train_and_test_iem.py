@@ -23,8 +23,8 @@ def split_trials(
     baseline_t_window=None,
     operation="-",
     channels=None,
-    bottom_pct=0.5,
-    top_pct=0.5,
+    bottom_frac=0.5,
+    top_frac=0.5,
     task_timings=params.TASK_TIMINGS,
     subjects_by_task=params.SUBJECTS_BY_TASK,
 ):
@@ -84,8 +84,8 @@ def split_trials(
 
     # Split trials into top and bottom percentiles
     n_trials = len(sorted_idx)
-    n_bottom_trials = int(n_trials * bottom_pct)
-    n_top_trials = int(n_trials * top_pct)
+    n_bottom_trials = int(n_trials * bottom_frac)
+    n_top_trials = int(n_trials * top_frac)
     trials_low = sorted_idx[:n_bottom_trials]
     trials_high = sorted_idx[-n_top_trials:]
     return trials_high, trials_low
