@@ -315,13 +315,16 @@ def train_and_test_one_subj(
         Subject ID.
     param : str
         Parameter to use for decoding.
-
+    param_dir : str
+        Directory containing parameterized data.
     n_blocks : int (default: params.N_BLOCKS)
         Number of blocks to use for cross-validation.
     n_block_iters : int (default: params.N_BLOCK_ITERS)
         Number of iterations to use for cross-validation.
-    save_dir : str (default: params.IEM_OUTPUT_DIR)
+    output_dir : str (default: params.IEM_OUTPUT_DIR)
         Directory to save output to.
+    verbose : bool (default: True)
+        Whether to print processing time.
 
     Returns
     -------
@@ -371,7 +374,6 @@ def train_and_test_one_subj(
                 operation = trial_split_criterion["operation"]
             output_dir = f"{output_dir}_{operation}_{split_baseline}"
 
-    mean_ctf_slope_dct, mean_ctf_slope_null_dct = {}, {}
     for tag, beh_data, param_data in zip(tags, beh_data_set, param_data_set):
         # Make directories specific to parameter and trial split (if there is one)
         save_dir = os.path.join(output_dir, param, tag)
@@ -384,22 +386,6 @@ def train_and_test_one_subj(
         if os.path.exists(ctf_slope_fname) and os.path.exists(
             ctf_slope_null_fname
         ):
-            # Load slope array
-            mean_ctf_slope = np.load(ctf_slope_fname)
-
-            # Load null slope array
-            mean_ctf_slope_null = np.load(ctf_slope_null_fname)
-
-            # Put into dictionaries
-            mean_ctf_slope_dct[tag] = mean_ctf_slope
-            mean_ctf_slope_null_dct[tag] = mean_ctf_slope_null
-
-            # Print loading time if desired
-            if verbose:
-                print(
-                    f"Loading {param}{tag} data for {subj} took "
-                    f"{time.time() - start:.3f} s"
-                )
             continue
 
         # Iterate through sets of blocks
@@ -443,6 +429,70 @@ def train_and_test_one_subj(
         np.save(ctf_slope_fname, mean_ctf_slope)
         np.save(ctf_slope_null_fname, mean_ctf_slope_null)
 
+    # Print processing time if desired
+    if verbose:
+        print(
+            f"Processing {param} data for {subj} took "
+            f"{time.time() - start:.3f} s"
+        )
+    return times
+
+
+def load_one_subj(
+    subj,
+    param,
+    param_dir,
+    trial_split_criterion=None,
+    output_dir=params.IEM_OUTPUT_DIR,
+    verbose=True,
+):
+    """Load IEM data for one subject.
+
+    Parameters
+    ----------
+    subj : str
+        Subject ID.
+    param : str
+        Parameter to use for decoding.
+    param_dir : str
+        Directory containing parameterized data.
+    trial_split_criterion : dict (default: None)
+        Dictionary containing trial split criterion.
+    output_dir : str (default: params.IEM_OUTPUT_DIR)
+        Directory to load output from.
+    verbose : bool (default: True)
+        Whether to print processing time.
+
+    Returns
+    -------
+    mean_ctf_slope : np.ndarray
+        Array containing CTF slope across time.
+    mean_ctf_slope_null : np.ndarray
+        Array containing null CTF slope across time.
+    """
+    # Start timer
+    start = time.time()
+
+    # Load parameterized data
+    _, times, _, _ = load_param_data(subj, param, param_dir)
+
+    # Split trials based on selection criteria if desired
+    tags = ("",)
+    if trial_split_criterion is not None:
+        tags = ("high", "low")
+    mean_ctf_slope_dct, mean_ctf_slope_null_dct = {}, {}
+    for tag in tags:
+        # Load data if already done
+        load_dir = os.path.join(output_dir, param, tag)
+        ctf_slope_fname = f"{load_dir}/ctf_slope_{subj}.npy"
+        ctf_slope_null_fname = f"{load_dir}/ctf_slope_null_{subj}.npy"
+
+        # Load slope array
+        mean_ctf_slope = np.load(ctf_slope_fname)
+
+        # Load null slope array
+        mean_ctf_slope_null = np.load(ctf_slope_null_fname)
+
         # Put into dictionaries
         mean_ctf_slope_dct[tag] = mean_ctf_slope
         mean_ctf_slope_null_dct[tag] = mean_ctf_slope_null
@@ -450,7 +500,7 @@ def train_and_test_one_subj(
     # Print processing time if desired
     if verbose:
         print(
-            f"Processing {param} data for {subj} took "
+            f"Loading {param} data for {subj} took "
             f"{time.time() - start:.3f} s"
         )
 
@@ -505,19 +555,10 @@ def train_and_test_all_subjs(
         )
     subjs = sorted(list(set(subjs) & set(subjs_processed)))
 
-    # Initialize arrays to store data across subjects by experiment
-    mean_ctf_slopes = [[] for _ in range(len(subjects_by_task))]
-    mean_ctf_slopes_null = [[] for _ in range(len(subjects_by_task))]
-    t_arrays = [[] for _ in range(len(subjects_by_task))]
-
     # Process each subject's data
     for subj in subjs:
         # Train and test for one subject
-        (
-            mean_ctf_slope,
-            mean_ctf_slope_null,
-            t_arr,
-        ) = train_and_test_one_subj(
+        train_and_test_one_subj(
             subj,
             param,
             param_dir,
@@ -525,7 +566,18 @@ def train_and_test_all_subjs(
             output_dir=output_dir,
         )
 
+    # Collate CTF slopes across subjects
+    mean_ctf_slopes = [[] for _ in range(len(subjects_by_task))]
+    mean_ctf_slopes_null = [[] for _ in range(len(subjects_by_task))]
+    t_arrays = [[] for _ in range(len(subjects_by_task))]
+    for subj in subjs:
         # Add data to big arrays
+        mean_ctf_slope, mean_ctf_slope_null, t_arr = load_one_subj(
+            subj,
+            param,
+            trial_split_criterion=trial_split_criterion,
+            output_dir=output_dir,
+        )
         experiment, subj_num = subj.split("_")
         task_num = np.argmax(
             [
