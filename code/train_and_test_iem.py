@@ -379,10 +379,11 @@ def train_and_test_one_subj(
         save_dir = os.path.join(output_dir, param, tag)
         os.makedirs(save_dir, exist_ok=True)
 
-        # Load data if already done
+        # Determine file names
         ctf_slope_fname = f"{save_dir}/ctf_slope_{subj}.npy"
         ctf_slope_null_fname = f"{save_dir}/ctf_slope_null_{subj}.npy"
 
+        # Skip processing if already done
         if os.path.exists(ctf_slope_fname) and os.path.exists(
             ctf_slope_null_fname
         ):
@@ -480,6 +481,20 @@ def load_one_subj(
     tags = ("",)
     if trial_split_criterion is not None:
         tags = ("high", "low")
+        split_param = trial_split_criterion["param"]
+        split_t_window = trial_split_criterion["t_window"]
+        split_baseline = None
+        if "baseline_t_window" in trial_split_criterion:
+            split_baseline = trial_split_criterion["baseline_t_window"]
+        output_dir = os.path.join(
+            output_dir, f"{split_param}_{split_t_window}"
+        )
+        if split_baseline is not None:
+            operation = "diff"
+            if "operation" in trial_split_criterion:
+                operation = trial_split_criterion["operation"]
+            output_dir = f"{output_dir}_{operation}_{split_baseline}"
+
     mean_ctf_slope_dct, mean_ctf_slope_null_dct = {}, {}
     for tag in tags:
         # Load data if already done
