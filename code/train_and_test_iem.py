@@ -14,7 +14,6 @@ from iem import IEM
 
 def split_trials(
     subj,
-    param_dir,
     param,
     t_window,
     baseline_t_window=None,
@@ -22,6 +21,7 @@ def split_trials(
     channels=None,
     bottom_frac=0.5,
     top_frac=0.5,
+    param_dir=params.SPARAM_DIR,
     task_timings=params.TASK_TIMINGS,
     subjects_by_task=params.SUBJECTS_BY_TASK,
 ):
@@ -349,9 +349,7 @@ def train_and_test_one_subj(
     tags = ("",)
     if trial_split_criterion is not None:
         tags = ("high", "low")
-        trials_high, trials_low = split_trials(
-            subj, param_dir, **trial_split_criterion
-        )
+        trials_high, trials_low = split_trials(subj, **trial_split_criterion)
         beh_data_set = (
             beh_data[trials_high],
             beh_data[trials_low],
@@ -671,43 +669,32 @@ def fit_iem_desired_params(
             for f in os.listdir(sparam_dir)
             if f.endswith(".fif")
         }
-
-    # Fit IEMs for total power
-    if total_power_dir is not None:
-        train_and_test_all_subjs(
-            "total_power", total_power_dir, output_dir=output_dir
-        )
+        sp_params.add("total_power")
 
     # Fit IEMs for all parameters from spectral parameterization
     for sp_param in sp_params:
         # Start timer
         start = time.time()
+
+        # Determine directory containing parameterized data
+        param_dir = sparam_dir
+        if sp_param == "total_power":
+            param_dir = total_power_dir
+
+        # Fit IEMs for one parameter
         train_and_test_all_subjs(
             sp_param,
-            sparam_dir,
+            param_dir,
             trial_split_criterion=trial_split_criterion,
             output_dir=output_dir,
         )
         if verbose:
             print(f"Fit IEMs for {sp_param} in {time.time() - start:.2f} s")
 
-    # Fit IEM for total power
+    # Load fit IEMs for all parameters from spectral parameterization
     ctf_slopes_all_params = {}
     ctf_slopes_null_all_params = {}
     t_all_params = {}
-    if total_power_dir is not None:
-        (
-            tot_pw_ctf_slopes,
-            tot_pw_ctf_slopes_null,
-            tot_pw_t,
-        ) = load_all_fit_iems(
-            "total_power", total_power_dir, output_dir=output_dir
-        )
-        ctf_slopes_all_params["total_power"] = tot_pw_ctf_slopes
-        ctf_slopes_null_all_params["total_power"] = tot_pw_ctf_slopes_null
-        t_all_params["total_power"] = tot_pw_t
-
-    # Load fit IEMs for all parameters from spectral parameterization
     for sp_param in sp_params:
         (
             ctf_slopes_one_param,

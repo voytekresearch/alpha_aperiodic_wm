@@ -334,13 +334,11 @@ def compare_params_ctf_time_courses(
 ):
     """Compare CTF slope time courses for different parameters from spectral
     parameterization model."""
-    all_params = list(
-        {
-            f.split("_")[-2]
-            for f in os.listdir(params.SPARAM_DIR)
-            if f.endswith(".fif")
-        }
-    )
+    all_params = [
+        f.split("_")[-2]
+        for f in os.listdir(params.SPARAM_DIR)
+        if f.endswith(".fif")
+    ]
     all_params = sorted(all_params + ["total_power"])
     log_params = [p for p in all_params if "log" in p]
     lin_params = [p for p in all_params if "lin" in p]

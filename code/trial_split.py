@@ -21,7 +21,6 @@ def split_trials_on_param(
         # Fit IEMs with trial split on exponent change
     ) = fit_iem_desired_params(
         sp_params=iem_params,
-        total_power_dir=None,
         output_dir=trial_split_dir,
         trial_split_criterion=split_dct,
     )
@@ -56,9 +55,11 @@ if __name__ == "__main__":
         for f in os.listdir(params.SPARAM_DIR)
         if f.endswith(".fif")
     }
+    sp_params.add("total_power")
     lin_osc_auc_params = [p for p in sp_params if "linOscAUC" in p]
 
     # Split trials based on exponent change
+    print("\nEXPONENT CHANGE")
     exponent_change_dct = {
         "param": "exponent",
         "t_window": "stimulus",
@@ -69,4 +70,31 @@ if __name__ == "__main__":
     }
     split_trials_on_param(
         lin_osc_auc_params, exponent_change_dct, "Exponent Change"
+    )
+
+    # Split trials based on alpha change
+    print("\nALPHA CHANGE")
+    alpha_change_dct = {
+        "param": "linOscAUC",
+        "t_window": "delay",
+        "baseline_t_window": "baseline",
+        "bottom_frac": 0.25,
+        "top_frac": 0.25,
+        "channels": ("O1", "O2"),
+    }
+    split_trials_on_param(["exponent"], alpha_change_dct, "Alpha Change")
+
+    # Split trials on total power change
+    print("\nTOTAL POWER CHANGE")
+    total_power_change_dct = {
+        "param": "total_power",
+        "param_dir": params.TOTAL_POWER_DIR,
+        "t_window": "delay",
+        "baseline_t_window": "baseline",
+        "bottom_frac": 0.25,
+        "top_frac": 0.25,
+        "channels": ("O1", "O2"),
+    }
+    split_trials_on_param(
+        ["exponent", "linOscAUC"], total_power_change_dct, "Total Power Change"
     )
