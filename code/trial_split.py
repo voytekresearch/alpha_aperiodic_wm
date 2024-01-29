@@ -1,7 +1,6 @@
 """Split trials based on selection criteria and re-train IEMs on those trial 
 splits."""
 # Import necessary modules
-import os
 import numpy as np
 from train_and_test_iem import fit_iem_desired_params
 from plot_iem_results import plot_ctf_slope_time_courses
@@ -40,8 +39,8 @@ def split_trials_on_param(
         ctf_slopes_contrast=split_low,
         contrast_label=f"{name}?",
         contrast_vals=[
-            f"Bottom {split_dct['bottom_frac']:%}%",
-            f"Top {split_dct['top_frac']:%}%",
+            f"Bottom {split_dct['bottom_frac']:.0%}",
+            f"Top {split_dct['top_frac']:.0%}",
         ],
         title=name,
         name=name.lower().replace(" ", "_"),
@@ -49,15 +48,6 @@ def split_trials_on_param(
 
 
 if __name__ == "__main__":
-    # Get all parameters from spectral parameterization
-    sp_params = {
-        f.split("_")[-2]
-        for f in os.listdir(params.SPARAM_DIR)
-        if f.endswith(".fif")
-    }
-    sp_params.add("total_power")
-    lin_osc_auc_params = [p for p in sp_params if "linOscAUC" in p]
-
     # Split trials based on exponent change
     print("\nEXPONENT CHANGE")
     exponent_change_dct = {
@@ -69,7 +59,9 @@ if __name__ == "__main__":
         "channels": ("O1", "O2"),
     }
     split_trials_on_param(
-        lin_osc_auc_params, exponent_change_dct, "Exponent Change"
+        ["exponent", "linOscAUC", "total_power"],
+        exponent_change_dct,
+        "Exponent Change",
     )
 
     # Split trials based on alpha change
@@ -82,7 +74,11 @@ if __name__ == "__main__":
         "top_frac": 0.25,
         "channels": ("O1", "O2"),
     }
-    split_trials_on_param(["exponent"], alpha_change_dct, "Alpha Change")
+    split_trials_on_param(
+        ["exponent", "linOscAUC", "total_power"],
+        alpha_change_dct,
+        "Alpha Change",
+    )
 
     # Split trials on total power change
     print("\nTOTAL POWER CHANGE")
@@ -96,5 +92,7 @@ if __name__ == "__main__":
         "channels": ("O1", "O2"),
     }
     split_trials_on_param(
-        ["exponent", "linOscAUC"], total_power_change_dct, "Total Power Change"
+        ["exponent", "linOscAUC", "total_power"],
+        total_power_change_dct,
+        "Total Power Change",
     )
