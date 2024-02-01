@@ -696,16 +696,24 @@ def fit_iem_desired_params(
     ctf_slopes_null_all_params = {}
     t_all_params = {}
     for sp_param in sp_params:
+        # Determine directory containing parameterized data
+        param_dir = sparam_dir
+        if sp_param == "total_power":
+            param_dir = total_power_dir
+
+        # Load fit IEMs for one parameter
         (
             ctf_slopes_one_param,
             ctf_slopes_null_one_param,
             t,
         ) = load_all_fit_iems(
             sp_param,
-            sparam_dir,
+            param_dir,
             trial_split_criterion=trial_split_criterion,
             output_dir=output_dir,
         )
+
+        # Put into dictionaries
         ctf_slopes_all_params[sp_param] = ctf_slopes_one_param
         ctf_slopes_null_all_params[sp_param] = ctf_slopes_null_one_param
         t_all_params[sp_param] = t
