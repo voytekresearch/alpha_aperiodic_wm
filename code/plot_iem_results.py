@@ -49,7 +49,6 @@ def plot_ctf_slope(
         t_arrays.values(), ctf_slopes.items()
     ):
         n = ctf_slopes_one_param.shape[0]
-        print(param, ctf_slopes_one_param.shape)
         one_param_df = pd.DataFrame(ctf_slopes_one_param, columns=t_one_param)
         one_param_df["Parameter"] = param
         one_param_df = one_param_df.melt(

@@ -1,4 +1,5 @@
 """All parameters for decoding spatial working memory (WM) from EEG data."""
+
 # Import necessary modules
 import numpy as np
 
@@ -54,6 +55,8 @@ EXPERIMENT_VARS = {
         "bad_electrodes": None,
         "art_pre_time": ("data", "eeg", "artPreTime"),
         "art_post_time": ("data", "eeg", "artPostTIme"),
+        "error": ("data", "beh", "err"),
+        "rt": ("data", "beh", "rt"),
     },
     "CB2": {
         "data": ("data", "eeg", "trial", "data"),
@@ -66,6 +69,8 @@ EXPERIMENT_VARS = {
         "bad_electrodes": ("data", "eeg", "droppedElectrodes"),
         "art_pre_time": ("data", "eeg", "arfPreTime"),
         "art_post_time": ("data", "eeg", "arfPostTime"),
+        "error": ("data", "beh", "colOffset"),
+        "rt": ("data", "beh", "rt"),
     },
     "CS": {
         "data": ("data", "eeg", "trial", "baselined"),
@@ -78,6 +83,8 @@ EXPERIMENT_VARS = {
         "bad_electrodes": ("data", "eeg", "droppedElectrodes"),
         "art_pre_time": ("data", "eeg", "settings", "seg", "arfPreTime"),
         "art_post_time": ("data", "eeg", "settings", "seg", "arfPostTime"),
+        "error": ("data", "beh", "angleOffset"),
+        "rt": ("data", "beh", "rt"),
     },
     "JNP": {
         "data": ("data", "eeg", "data"),
@@ -90,6 +97,8 @@ EXPERIMENT_VARS = {
         "bad_electrodes": None,
         "art_pre_time": None,
         "art_post_time": None,
+        "error": ("data", "beh", "err"),
+        "rt": None,
     },
     "SB": {
         "data": ("data", "eeg", "trial", "data"),
@@ -102,6 +111,8 @@ EXPERIMENT_VARS = {
         "bad_electrodes": ("data", "eeg", "droppedElectrodes"),
         "art_pre_time": ("data", "eeg", "arfPreTime"),
         "art_post_time": ("data", "eeg", "arfPostTime"),
+        "error": None,
+        "rt": ("data", "beh", "stim", "rt"),
     },
 }
 
