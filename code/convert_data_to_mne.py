@@ -66,7 +66,7 @@ def split_data_by_subject(
     experiment_vars=frozendict(params.EXPERIMENT_VARS),
     num_subjects=frozendict(params.NUM_SUBJECTS),
     download_dir=params.DOWNLOAD_DIR,
-    processed_dir=params.PROCESSED_DIR,
+    epochs_dir=params.EPOCHS_DIR,
 ):
     """Split data for experiments into individual subjects.
 
@@ -80,36 +80,39 @@ def split_data_by_subject(
         Dictionary of number of subjects for each experiment.
     download_dir : str (default: params.DOWNLOAD_DIR)
         Directory containing downloaded data.
-    processed_dir : str (default: params.PROCESSED_DIR)
-        Directory to save processed data to.
+    epochs_dir : str (default: params.EPOCHS_DIR)
+        Directory to save Epochs data to.
     """
     # Make directory if necessary
-    os.makedirs(processed_dir, exist_ok=True)
+    os.makedirs(epochs_dir, exist_ok=True)
 
     # Restrict experiment variables to selected experiment
     num_subjects = num_subjects[experiment]
     experiment_vars = experiment_vars[experiment]
 
-    # Check if experiment already processed to avoid loading large MAT file
-    # if possible
-    num_processed_files = len(
-        [f for f in os.listdir(processed_dir) if experiment in f]
-    )
-    if num_subjects == num_processed_files:
+    # Check if Epochs already generated for experiment to avoid loading large
+    # MAT file if possible
+    num_epo_files = len([f for f in os.listdir(epochs_dir) if experiment in f])
+    if num_subjects == num_epo_files:
         return
 
     # Load data from experiment
     mat_fn = f"{download_dir}/spatialData_{experiment}.mat"
     exp_data = read_mat(mat_fn)
 
-    # Process data for each subject
+    # Convert data to Epochs for each subject
     for subject in range(num_subjects):
-        # Skip if already processed
-        epochs_fname = f"{processed_dir}/{experiment}_{subject}_eeg_epo.fif"
+        # Skip if already done
+        epochs_fname = f"{epochs_dir}/{experiment}_{subject}_eeg_epo.fif"
         if os.path.exists(epochs_fname):
             continue
 
-        print(f"Processing {experiment} subject {subject + 1}/{num_subjects}")
+        # Announce start of conversion
+        print(
+            f"Converting to Epochs for {experiment},"
+            f" subject {subject + 1}/{num_subjects}"
+        )
+
         # Extract data from big nested dictionary
         eeg_data = _index_nested_object(
             exp_data, experiment_vars["data"], subject

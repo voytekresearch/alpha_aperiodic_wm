@@ -48,7 +48,7 @@ def compute_total_power(epochs, save_fname, alpha_band=params.ALPHA_BAND):
         analytic_sig.copy().apply_function(np.abs).apply_function(np.square)
     )
 
-    # Save data to avoid re-processing
+    # Save data to avoid unnecessary recomputation
     total_power.save(save_fname)
 
 
@@ -247,7 +247,7 @@ def run_decomp_and_sparam_all_trials(
     Parameters:
     -----------
     epochs : mne.Epochs
-        Epochs object containing data to be processed.
+        Epochs object containing data to be parameterized.
     save_dir : str
         Directory to save results to.
 
@@ -270,13 +270,13 @@ def run_decomp_and_sparam_all_trials(
     # If not all trials have been computed, compute remaining trials
     if not len(trials_computed) == n_trials:
         # Print remaining trials to compute
-        trials_to_process = sorted(
+        trials_to_sparam = sorted(
             list(set(range(n_trials)) - set(trials_computed))
         )
         if verbose:
             print(
-                f"Already processed: {len(trials_computed)}\n"
-                f"Still to process: {len(trials_to_process)}\n"
+                f"Already parameterized: {len(trials_computed)}\n"
+                f"Still to parameterize: {len(trials_to_sparam)}\n"
             )
 
         # Calculate subject's alpha peak frequency
@@ -310,10 +310,10 @@ def run_decomp_and_sparam_all_trials(
             run_decomp_and_sparam_one_trial.remote(
                 epochs_id, trial_num, alpha_cf
             )
-            for trial_num in trials_to_process
+            for trial_num in trials_to_sparam
         ]
 
-        # Save trial data as processed
+        # Save trial data as it becomes available
         while result_ids:
             done_id, result_ids = ray.wait(result_ids)
 
@@ -403,7 +403,7 @@ def convert_sparam_df_to_mne(sparam_df, info, save_fname, verbose=True):
 def spec_decomp_and_param_one_subject(
     experiment,
     subject,
-    processed_dir=params.PROCESSED_DIR,
+    epochs_dir=params.EPOCHS_DIR,
     total_power_dir=params.TOTAL_POWER_DIR,
     sparam_dir=params.SPARAM_DIR,
 ):
@@ -424,16 +424,16 @@ def spec_decomp_and_param_one_subject(
         Name of experiment.
     subject : str
         Name of subject.
-    processed_dir : str (default: params.PROCESSED_DIR)
-        Directory to save processed data to.
+    epochs_dir : str (default: params.EPOCHS_DIR)
+        Directory to load Epochs data from.
     total_power_dir : str (default: params.TOTAL_POWER_DIR)
         Directory to save total power data to.
     sparam_dir : str (default: params.SPARAM_DIR)
         Directory to save spectral parameterization data to.
     """
     # Make directory to save data to if necessary
-    os.makedirs(processed_dir, exist_ok=True)
     os.makedirs(sparam_dir, exist_ok=True)
+    os.makedirs(total_power_dir, exist_ok=True)
 
     # Make subject ID from experiment and subject
     subj_id = f"{experiment}_{subject}"
@@ -454,11 +454,10 @@ def spec_decomp_and_param_one_subject(
     print(f"\nProcessing Subject {subj_id}")
 
     # Load subject's EEG data
-    epochs_fname = f"{processed_dir}/{subj_id}_eeg_epo.fif"
+    epochs_fname = f"{epochs_dir}/{subj_id}_eeg_epo.fif"
     epochs = mne.read_epochs(epochs_fname, verbose=False)
 
     # Calculate total power
-    os.makedirs(total_power_dir, exist_ok=True)
     total_power_fname = f"{total_power_dir}/{subj_id}_total_power_epo.fif"
     compute_total_power(epochs, total_power_fname)
 
@@ -493,7 +492,7 @@ def spec_decomp_and_param_one_subject(
 def spec_decomp_and_param_all_subjects(
     task_num=None,
     niceness=params.NICENESS,
-    processed_dir=params.PROCESSED_DIR,
+    epochs_dir=params.EPOCHS_DIR,
     subjects_by_task=params.SUBJECTS_BY_TASK,
 ):
     """Load data and then perform spectral decomposition and parameterization
@@ -503,7 +502,7 @@ def spec_decomp_and_param_all_subjects(
     -----------
     niceness : int (default: params.NICENESS)
         Niceness value to set for process.
-    processed_dir : str (default: params.PROCESSED_DIR)
+    epochs_dir : str (default: params.EPOCHS_DIR)
         Directory to save processed data to.
     """
     # Set niceness
@@ -515,7 +514,7 @@ def spec_decomp_and_param_all_subjects(
         subjs = [(experiment, subj_id) for subj_id in subj_ids]
 
     # Process each subject's data
-    subject_files = sorted(os.listdir(processed_dir))
+    subject_files = sorted(os.listdir(epochs_dir))
     for subject_fname in subject_files:
         # Extract experiment and subject from filename
         experiment, subject = subject_fname.split("_")[:2]

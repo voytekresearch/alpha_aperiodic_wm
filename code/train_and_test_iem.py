@@ -92,7 +92,7 @@ def load_param_data(
     subj,
     param,
     param_dir,
-    processed_dir=params.PROCESSED_DIR,
+    epochs_dir=params.EPOCHS_DIR,
     sparam_dir=params.SPARAM_DIR,
     decim_factor=params.DECIM_FACTOR,
 ):
@@ -104,7 +104,7 @@ def load_param_data(
         Subject ID.
     param : str
         Parameter to decode.
-    processed_dir : str (default: params.PROCESSED_DIR)
+    epochs_dir : str (default: params.EPOCHS_DIR)
         Path to directory containing processed data.
     decim_factor : int (default: params.DECIM_FACTOR)
         Decimation factor.
@@ -122,7 +122,7 @@ def load_param_data(
     """
     # Load epoched EEG data
     epochs = mne.read_epochs(
-        os.path.join(processed_dir, f"{subj}_eeg_epo.fif"),
+        os.path.join(epochs_dir, f"{subj}_eeg_epo.fif"),
         preload=True,
         verbose=False,
     )
@@ -551,7 +551,6 @@ def train_and_test_all_subjs(
     param,
     param_dir,
     trial_split_criterion=None,
-    subjects_by_task=params.SUBJECTS_BY_TASK,
     output_dir=params.IEM_OUTPUT_DIR,
 ):
     """Train and test for all subjects.
