@@ -1,4 +1,5 @@
 """Process MNE Epochs data for each subject."""
+
 # Import necessary modules
 import os
 import sys
@@ -177,9 +178,7 @@ def run_decomp_and_sparam_one_trial(
         # Determine all areas to extract
         area_params_dct["logOscAUC"] = fm.power_spectrum - fm._ap_fit
         area_params_dct["logTotAUC"] = fm.power_spectrum
-        area_params_dct["linOscAUC"] = (
-            10**fm.power_spectrum - 10**fm._ap_fit
-        )
+        area_params_dct["linOscAUC"] = 10**fm.power_spectrum - 10**fm._ap_fit
         area_params_dct["linTotAUC"] = 10**fm.power_spectrum
         area_params_one_psd = {}
         for param, spectra in area_params_dct.items():
@@ -408,8 +407,7 @@ def process_one_subject(
     total_power_dir=params.TOTAL_POWER_DIR,
     sparam_dir=params.SPARAM_DIR,
 ):
-    """Load EEG and behavioral data and then perform preprocessing for one
-    subject.
+    """Load data and then perform preprocessing for one subject.
 
     Preprocessing #1: Following Foster et al. (2015), filter data in desired
     alpha band, apply Hilbert transform, and compute total power from analytic
@@ -497,8 +495,7 @@ def process_all_subjects(
     processed_dir=params.PROCESSED_DIR,
     subjects_by_task=params.SUBJECTS_BY_TASK,
 ):
-    """Load EEG and behavioral data and then perform preprocessing for all
-    subjects.
+    """Load data and then perform preprocessing for all subjects.
 
     Parameters:
     -----------

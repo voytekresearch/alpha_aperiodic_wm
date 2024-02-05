@@ -96,7 +96,7 @@ def load_param_data(
     sparam_dir=params.SPARAM_DIR,
     decim_factor=params.DECIM_FACTOR,
 ):
-    """Load processed EEG and behavioral data for one subject.
+    """Load processed EEG and positional data for one subject.
 
     Parameters
     ----------
@@ -115,14 +115,21 @@ def load_param_data(
         Epochs object containing EEG data.
     times : np.ndarray
         Time course.
-    beh_data : dict
-        Dictionary containing behavioral data.
+    pos_data : dict
+        Dictionary containing positional data.
     param_data : np.ndarray
         Array containing parameterized data for decoding.
     """
-    # Load behavioral data
-    beh_data = np.load(os.path.join(processed_dir, f"{subj}_beh.npy"))
-    beh_nan = np.isnan(beh_data)
+    # Load epoched EEG data
+    epochs = mne.read_epochs(
+        os.path.join(processed_dir, f"{subj}_eeg_epo.fif"),
+        preload=True,
+        verbose=False,
+    )
+
+    # Extract position data
+    pos_data = epochs.metadata["pos_bin"].values
+    pos_nan = np.isnan(pos_data)
 
     # Load any skipped trials
     skipped_fname = f"{sparam_dir}/skipped.csv"
@@ -130,18 +137,11 @@ def load_param_data(
         skipped_df = pd.read_csv(skipped_fname)
         skipped_dct = skipped_df.to_dict(orient="list")
         if subj in skipped_dct.keys():
-            beh_nan[skipped_dct[subj]] = True
+            pos_nan[skipped_dct[subj]] = True
 
     # Remove trials with NaNs
-    beh_data = beh_data[~beh_nan]
-
-    # Load epoched EEG data
-    epochs = mne.read_epochs(
-        os.path.join(processed_dir, f"{subj}_eeg_epo.fif"),
-        preload=True,
-        verbose=False,
-    )
-    epochs.drop(beh_nan, verbose=False)
+    pos_data = pos_data[~pos_nan]
+    epochs.drop(pos_nan, verbose=False)
 
     # Get times from epochs, taking account of decimation if applied
     times = epochs.times
@@ -152,12 +152,12 @@ def load_param_data(
     param_data = mne.read_epochs(
         os.path.join(param_dir, f"{subj}_{param}_epo.fif"), verbose=False
     ).get_data(copy=True)
-    param_data = param_data[~beh_nan, :, :]
-    return epochs, times, beh_data, param_data
+    param_data = param_data[~pos_nan, :, :]
+    return epochs, times, pos_data, param_data
 
 
 def average_param_data_within_trial_blocks(
-    epochs, times, beh_data, param_data, n_blocks=params.N_BLOCKS
+    epochs, times, pos_data, param_data, n_blocks=params.N_BLOCKS
 ):
     """Averaging parameterized data across trials within a block for each
     location bin.
@@ -168,8 +168,8 @@ def average_param_data_within_trial_blocks(
         Epochs object containing EEG data.
     times : np.ndarray
         Time course.
-    beh_data : dict
-        Dictionary containing behavioral data.
+    pos_data : dict
+        Dictionary containing positional data.
     param_data : np.ndarray
         Array containing parameterized data for decoding.
     n_blocks : int (default: params.N_BLOCKS)
@@ -181,16 +181,16 @@ def average_param_data_within_trial_blocks(
         Array containing averaged parameterized data for decoding.
     """
     # Extract relative variables from data
-    assert np.count_nonzero(np.isnan(beh_data)) == 0
-    n_bins = np.sum(~np.isnan(np.unique(beh_data)))
+    assert np.count_nonzero(np.isnan(pos_data)) == 0
+    n_bins = np.sum(~np.isnan(np.unique(pos_data)))
     n_channels = epochs.get_data(copy=True).shape[-2]
     n_timepts = len(times)
 
     # Determine number of trials per location bin
-    _, counts = np.unique(beh_data, return_counts=True)
+    _, counts = np.unique(pos_data, return_counts=True)
     n_trials_per_bin = counts.min() // n_blocks * n_blocks
     idx_split_by_vals = np.split(
-        np.argsort(beh_data), np.where(np.diff(sorted(beh_data)))[0] + 1
+        np.argsort(pos_data), np.where(np.diff(sorted(pos_data)))[0] + 1
     )
 
     # Calculate parameterized data for block of trials
@@ -337,22 +337,22 @@ def train_and_test_one_subj(
     start = time.time()
 
     # Load parameterized data
-    epochs, times, beh_data, param_data = load_param_data(
+    epochs, times, pos_data, param_data = load_param_data(
         subj,
         param,
         param_dir,
     )
 
     # Split trials based on selection criteria
-    beh_data_set = (beh_data,)
+    pos_data_set = (pos_data,)
     param_data_set = (param_data,)
     tags = ("",)
     if trial_split_criterion is not None:
         tags = ("high", "low")
         trials_high, trials_low = split_trials(subj, **trial_split_criterion)
-        beh_data_set = (
-            beh_data[trials_high],
-            beh_data[trials_low],
+        pos_data_set = (
+            pos_data[trials_high],
+            pos_data[trials_low],
         )
         param_data_set = (
             param_data[trials_high],
@@ -372,7 +372,7 @@ def train_and_test_one_subj(
                 operation = trial_split_criterion["operation"]
             output_dir = f"{output_dir}_{operation}_{split_baseline}"
 
-    for tag, beh_data, param_data in zip(tags, beh_data_set, param_data_set):
+    for tag, pos_data, param_data in zip(tags, pos_data_set, param_data_set):
         # Make directories specific to parameter and trial split (if there is one)
         save_dir = os.path.join(output_dir, param, tag)
         os.makedirs(save_dir, exist_ok=True)
@@ -394,7 +394,7 @@ def train_and_test_one_subj(
         for block_iter in range(n_block_iters):
             # Average parameterized data within trial blocks
             param_arr = average_param_data_within_trial_blocks(
-                epochs, times, beh_data, param_data
+                epochs, times, pos_data, param_data
             )
 
             # Iterate through blocks
