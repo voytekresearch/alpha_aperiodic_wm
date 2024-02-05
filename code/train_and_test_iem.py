@@ -372,6 +372,7 @@ def train_and_test_one_subj(
                 operation = trial_split_criterion["operation"]
             output_dir = f"{output_dir}_{operation}_{split_baseline}"
 
+    did_fitting = False
     for tag, pos_data, param_data in zip(tags, pos_data_set, param_data_set):
         # Make directories specific to parameter and trial split (if there is one)
         save_dir = os.path.join(output_dir, param, tag)
@@ -388,6 +389,7 @@ def train_and_test_one_subj(
             continue
 
         # Iterate through sets of blocks
+        did_fitting = True
         n_timepts = len(times)
         ctf_slope = np.zeros((n_block_iters, n_blocks, n_timepts))
         ctf_slope_null = np.zeros((n_block_iters, n_blocks, n_timepts))
@@ -429,9 +431,9 @@ def train_and_test_one_subj(
         np.save(ctf_slope_null_fname, mean_ctf_slope_null)
 
     # Print processing time if desired
-    if verbose:
+    if verbose and did_fitting:
         print(
-            f"Processing {param} data for {subj} took "
+            f"Fit IEMs on {param} data for {subj} in "
             f"{time.time() - start:.3f} s"
         )
     return times

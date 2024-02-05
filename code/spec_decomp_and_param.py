@@ -1,4 +1,4 @@
-"""Process MNE Epochs data for each subject."""
+"""Compute spectral decomposition and parameterization of MNE Epochs data."""
 
 # Import necessary modules
 import os
@@ -400,20 +400,21 @@ def convert_sparam_df_to_mne(sparam_df, info, save_fname, verbose=True):
         )
 
 
-def process_one_subject(
+def spec_decomp_and_param_one_subject(
     experiment,
     subject,
     processed_dir=params.PROCESSED_DIR,
     total_power_dir=params.TOTAL_POWER_DIR,
     sparam_dir=params.SPARAM_DIR,
 ):
-    """Load data and then perform preprocessing for one subject.
+    """Load data and then perform spectral decomposition and parameterization
+    for one subject.
 
-    Preprocessing #1: Following Foster et al. (2015), filter data in desired
+    Method #1: Following Foster et al. (2015), filter data in desired
     alpha band, apply Hilbert transform, and compute total power from analytic
     signal.
 
-    Preprocessing #2: Use multiple tapers to estimate PSD with sliding window,
+    Method #2: Use multiple tapers to estimate PSD with sliding window,
     spectral parameterization to fit periodic and aperiodic components, and then
     isolate aperiodic exponent and alpha oscillatory power.
 
@@ -489,13 +490,14 @@ def process_one_subject(
     convert_sparam_df_to_mne(sparam_df, epochs.info, sparam_epo_fname)
 
 
-def process_all_subjects(
+def spec_decomp_and_param_all_subjects(
     task_num=None,
     niceness=params.NICENESS,
     processed_dir=params.PROCESSED_DIR,
     subjects_by_task=params.SUBJECTS_BY_TASK,
 ):
-    """Load data and then perform preprocessing for all subjects.
+    """Load data and then perform spectral decomposition and parameterization
+    for all subjects.
 
     Parameters:
     -----------
@@ -522,7 +524,7 @@ def process_all_subjects(
                 continue
         subject = int(subject)
         try:
-            process_one_subject(experiment, subject)
+            spec_decomp_and_param_one_subject(experiment, subject)
         except fooof.core.errors.DataError:
             print(f"Error processing Subject {experiment}_{subject}")
             continue
@@ -534,4 +536,4 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         TASK = int(sys.argv[1])
         print(f"Processing Task {TASK}")
-    process_all_subjects(task_num=TASK)
+    spec_decomp_and_param_all_subjects(task_num=TASK)
