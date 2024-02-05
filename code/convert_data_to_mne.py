@@ -109,8 +109,8 @@ def split_data_by_subject(
 
         # Announce start of conversion
         print(
-            f"Converting to Epochs for {experiment},"
-            f" subject {subject + 1}/{num_subjects}"
+            f"Converting to Epochs for {experiment}_{subject}"
+            f" {subject + 1}/{num_subjects}"
         )
 
         # Extract data from big nested dictionary
@@ -157,7 +157,7 @@ def split_data_by_subject(
         rt = _index_nested_object(exp_data, experiment_vars["rt"], subject)
 
         # Create info, labeling bad electrodes
-        info = mne.create_info(ch_labels, sfreq, ch_types="eeg")
+        info = mne.create_info(ch_labels, sfreq, ch_types="eeg", verbose=False)
         if bad_electrodes is None:
             bad_electrodes = []
         info["bads"] = [e for e in list(bad_electrodes) if e in ch_labels]
@@ -165,12 +165,12 @@ def split_data_by_subject(
         # Create metadata DataFrame
         pos_bin_cleaned = pos_bin.flat
         error_cleaned = np.full(len(pos_bin_cleaned), np.nan)
-        if type(rt) is list:
-            if len(error) > 0:
+        if error is not None:
+            if len(error) > 1:
                 error_cleaned = error.flat
         rt_cleaned = np.full(len(pos_bin_cleaned), np.nan)
-        if type(rt) is list:
-            if len(rt) > 0:
+        if rt is not None:
+            if len(rt) > 1:
                 rt_cleaned = rt.flat
         metadata_df = pd.DataFrame(
             {
@@ -186,6 +186,7 @@ def split_data_by_subject(
             info,
             tmin=-np.abs(pre_time) / 1000,
             metadata=metadata_df,
+            verbose=False,
         )
         if epochs.times[-1] != post_time / 1000:
             epochs = mne.EpochsArray(
@@ -193,6 +194,7 @@ def split_data_by_subject(
                 info,
                 tmin=-np.abs(art_pre_time) / 1000,
                 metadata=metadata_df,
+                verbose=False,
             )
         else:
             # Crop data
@@ -205,7 +207,7 @@ def split_data_by_subject(
                 assert epochs.times[-1] == art_post_time / 1000
 
         # Drop bad trials
-        epochs = epochs.drop(bad_trials)
+        epochs = epochs.drop(bad_trials, verbose=False)
 
         # Save epochs
         epochs.save(epochs_fname)
