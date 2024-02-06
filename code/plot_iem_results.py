@@ -1,4 +1,5 @@
 """Functions to plot results from IEM analyses."""
+
 # Import necessary modules
 import cmasher as cmr
 import numpy as np
@@ -263,9 +264,10 @@ def plot_ctf_slope_time_courses(
         ctf_slopes_one_task = {
             k: v[task_num] for k, v in ctf_slopes_all_params.items()
         }
-        ctf_slopes_contrast_one_task = {
-            k: v[task_num] for k, v in ctf_slopes_contrast.items()
-        }
+        if ctf_slopes_contrast is not None:
+            ctf_slopes_contrast_one_task = {
+                k: v[task_num] for k, v in ctf_slopes_contrast.items()
+            }
         t = {k: v[task_num] for k, v in t_all_params.items()}
 
         # Get the corresponding subplot from the GridSpec
@@ -277,22 +279,26 @@ def plot_ctf_slope_time_courses(
             ctf_slopes_one_param_set = {
                 k: v for k, v in ctf_slopes_one_task.items() if k in param_set
             }
-            ctf_slopes_contrast_one_param_set = {
-                k: v
-                for k, v in ctf_slopes_contrast_one_task.items()
-                if k in param_set
-            }
+            if ctf_slopes_contrast is not None:
+                ctf_slopes_contrast_one_param_set = {
+                    k: v
+                    for k, v in ctf_slopes_contrast_one_task.items()
+                    if k in param_set
+                }
             t_one_param_set = {k: v for k, v in t.items() if k in param_set}
 
             # Plot CTF slope time courses for parameter set and palette
             plt_timings = i == len(param_sets) - 1
             kwargs = {
-                "ctf_slopes_contrast": ctf_slopes_contrast_one_param_set,
                 "palette": palette,
                 "plot_timings": plt_timings,
                 "plot_errorbars": False,
                 "ax": ax,
             }
+            if ctf_slopes_contrast is not None:
+                kwargs["ctf_slopes_contrast"] = (
+                    ctf_slopes_contrast_one_param_set
+                )
             if contrast_label is not None:
                 kwargs["contrast_label"] = contrast_label
             if contrast_vals is not None:
