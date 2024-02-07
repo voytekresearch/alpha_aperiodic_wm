@@ -18,6 +18,7 @@ def plot_ctf_slope(
     task_num,
     task_timings,
     ctf_slopes_contrast=None,
+    param_names=None,
     contrast_label="Shuffled location labels?",
     contrast_vals=("No", "Yes"),
     palette=None,
@@ -42,6 +43,10 @@ def plot_ctf_slope(
     save_fname : str (default: None)
         File name to save figure to.  If None, figure will not be saved.
     """
+    # Set default parameter names
+    if param_names is None:
+        param_names = {k: k for k in ctf_slopes.keys()}
+
     # Make empty list for CTF slope DataFrames
     ctf_slopes_dfs = []
 
@@ -51,7 +56,7 @@ def plot_ctf_slope(
     ):
         n = ctf_slopes_one_param.shape[0]
         one_param_df = pd.DataFrame(ctf_slopes_one_param, columns=t_one_param)
-        one_param_df["Parameter"] = param
+        one_param_df["Parameter"] = param_names[param]
         one_param_df = one_param_df.melt(
             id_vars=["Parameter"], var_name="Time (s)", value_name="CTF slope"
         )
@@ -62,7 +67,7 @@ def plot_ctf_slope(
             one_param_df_contrast = pd.DataFrame(
                 ctf_slopes_contrast[param], columns=t_one_param
             )
-            one_param_df_contrast["Parameter"] = param
+            one_param_df_contrast["Parameter"] = param_names[param]
             one_param_df_contrast = one_param_df_contrast.melt(
                 id_vars=["Parameter"],
                 var_name="Time (s)",
@@ -140,102 +145,12 @@ def plot_ctf_slope(
         plt.close()
 
 
-def plot_ctf_slope_paired_ttest(
-    ctf_slopes,
-    t_arrays,
-    t_window,
-    ctf_slopes_shuffled=None,
-    palette=None,
-    save_fname=None,
-    task_timings=params.TASK_TIMINGS,
-):
-    """Plot paired t-tests of channel tuning function (CTF) slope averaged
-    time window for multiple parameters.
-    """
-    # Make empty list for CTF slope DataFrames
-    ctf_slopes_dfs = []
-    for i, (ctf_slope, t_arr) in enumerate(zip(ctf_slopes, t_arrays)):
-        # If time window is None, use task timings
-        if t_window == "delay":
-            t_window = task_timings[i]
-
-        # Average across time window
-        t_window_idx = np.where(
-            (t_arr >= t_window[0]) & (t_arr <= t_window[1])
-        )[0]
-        ctf_slope = -np.mean(ctf_slope[:, t_window_idx], axis=1)
-        if ctf_slopes_shuffled is not None:
-            ctf_slope_shuffled = -np.mean(
-                ctf_slopes_shuffled[i][:, t_window_idx], axis=1
-            )
-
-        # Make DataFrame of CTF slopes
-        ctf_slope_df = pd.DataFrame(
-            ctf_slope, columns=["CTF slope"]
-        ).reset_index(names="trial")
-        ctf_slope_df.loc[:, "Shuffled location labels?"] = "No"
-        ctf_slope_df.loc[:, "Task"] = str(i + 1)
-
-        # Add DataFrame of CTF slopes for shuffled location labels if desired
-        if ctf_slope_shuffled is not None:
-            ctf_slope_shuffled_df = pd.DataFrame(
-                ctf_slope_shuffled, columns=["CTF slope"]
-            ).reset_index(names="trial")
-            ctf_slope_shuffled_df.loc[:, "Shuffled location labels?"] = "Yes"
-            ctf_slope_shuffled_df.loc[:, "Task"] = str(i + 1)
-            ctf_slope_df = pd.concat(
-                (ctf_slope_df, ctf_slope_shuffled_df), axis=0
-            )
-
-        # Add DataFrame to list
-        ctf_slopes_dfs.append(ctf_slope_df)
-
-    # Combine DataFrames of CTF slopes from each task into one big DataFrame
-    ctf_slopes_big_df = pd.concat(ctf_slopes_dfs).reset_index()
-
-    # Plot paired t-tests of CTF slopes for each task
-    plt.figure(figsize=(10, 6))
-    ax = sns.violinplot(
-        data=ctf_slopes_big_df,
-        x="Task",
-        y="CTF slope",
-        split=True,
-        hue="Shuffled location labels?",
-        palette=palette,
-        inner="stick",
-    )
-    pairs = [
-        ((str(task_num), "No"), (str(task_num), "Yes"))
-        for task_num in list(set(ctf_slopes_big_df["Task"]))
-    ]
-    annotator = Annotator(
-        ax,
-        pairs,
-        data=ctf_slopes_big_df,
-        x="Task",
-        y="CTF slope",
-        hue="Shuffled location labels?",
-        plot="violinplot",
-    )
-    annotator.configure(
-        test="t-test_paired",
-        text_format="star",
-        comparisons_correction="bonferroni",
-    )
-    annotator.apply_and_annotate()
-    sns.despine(ax=ax)
-
-    # Save figure
-    if save_fname:
-        plt.savefig(save_fname, bbox_inches="tight", dpi=300)
-    return
-
-
 def plot_ctf_slope_time_courses(
     ctf_slopes_all_params,
     t_all_params,
     param_sets=None,
     palettes=None,
+    param_names=None,
     name="",
     title="",
     ctf_slopes_contrast=None,
@@ -247,11 +162,13 @@ def plot_ctf_slope_time_courses(
 ):
     """Plot CTF slope time courses for total power and parameters from spectral
     parameterization."""
-    # Set default parameter sets and palettes
+    # Set default parameter sets, palettes, and parameter names
     if param_sets is None:
         param_sets = [list(ctf_slopes_all_params.keys())]
     if palettes is None:
         palettes = ["rocket"]
+    if param_names is None:
+        param_names = {k: k for k in ctf_slopes_all_params.keys()}
 
     # Create a GridSpec with one row and the number of tasks as columns
     num_tasks = len(subjects_by_task)
@@ -289,8 +206,10 @@ def plot_ctf_slope_time_courses(
 
             # Plot CTF slope time courses for parameter set and palette
             plt_timings = i == len(param_sets) - 1
+            param_names_param_set = {k: param_names[k] for k in param_set}
             kwargs = {
                 "palette": palette,
+                "param_names": param_names_param_set,
                 "plot_timings": plt_timings,
                 "plot_errorbars": False,
                 "ax": ax,
@@ -399,6 +318,97 @@ def compare_params_ctf_time_courses(
             name=comp_name,
             title=comp_title,
         )
+
+
+def plot_ctf_slope_paired_ttest(
+    ctf_slopes,
+    t_arrays,
+    t_window,
+    ctf_slopes_shuffled=None,
+    palette=None,
+    save_fname=None,
+    task_timings=params.TASK_TIMINGS,
+):
+    """Plot paired t-tests of channel tuning function (CTF) slope averaged
+    time window for multiple parameters.
+    """
+    # Make empty list for CTF slope DataFrames
+    ctf_slopes_dfs = []
+    for i, (ctf_slope, t_arr) in enumerate(zip(ctf_slopes, t_arrays)):
+        # If time window is None, use task timings
+        if t_window == "delay":
+            t_window = task_timings[i]
+
+        # Average across time window
+        t_window_idx = np.where(
+            (t_arr >= t_window[0]) & (t_arr <= t_window[1])
+        )[0]
+        ctf_slope = -np.mean(ctf_slope[:, t_window_idx], axis=1)
+        if ctf_slopes_shuffled is not None:
+            ctf_slope_shuffled = -np.mean(
+                ctf_slopes_shuffled[i][:, t_window_idx], axis=1
+            )
+
+        # Make DataFrame of CTF slopes
+        ctf_slope_df = pd.DataFrame(
+            ctf_slope, columns=["CTF slope"]
+        ).reset_index(names="trial")
+        ctf_slope_df.loc[:, "Shuffled location labels?"] = "No"
+        ctf_slope_df.loc[:, "Task"] = str(i + 1)
+
+        # Add DataFrame of CTF slopes for shuffled location labels if desired
+        if ctf_slope_shuffled is not None:
+            ctf_slope_shuffled_df = pd.DataFrame(
+                ctf_slope_shuffled, columns=["CTF slope"]
+            ).reset_index(names="trial")
+            ctf_slope_shuffled_df.loc[:, "Shuffled location labels?"] = "Yes"
+            ctf_slope_shuffled_df.loc[:, "Task"] = str(i + 1)
+            ctf_slope_df = pd.concat(
+                (ctf_slope_df, ctf_slope_shuffled_df), axis=0
+            )
+
+        # Add DataFrame to list
+        ctf_slopes_dfs.append(ctf_slope_df)
+
+    # Combine DataFrames of CTF slopes from each task into one big DataFrame
+    ctf_slopes_big_df = pd.concat(ctf_slopes_dfs).reset_index()
+
+    # Plot paired t-tests of CTF slopes for each task
+    plt.figure(figsize=(10, 6))
+    ax = sns.violinplot(
+        data=ctf_slopes_big_df,
+        x="Task",
+        y="CTF slope",
+        split=True,
+        hue="Shuffled location labels?",
+        palette=palette,
+        inner="stick",
+    )
+    pairs = [
+        ((str(task_num), "No"), (str(task_num), "Yes"))
+        for task_num in list(set(ctf_slopes_big_df["Task"]))
+    ]
+    annotator = Annotator(
+        ax,
+        pairs,
+        data=ctf_slopes_big_df,
+        x="Task",
+        y="CTF slope",
+        hue="Shuffled location labels?",
+        plot="violinplot",
+    )
+    annotator.configure(
+        test="t-test_paired",
+        text_format="star",
+        comparisons_correction="bonferroni",
+    )
+    annotator.apply_and_annotate()
+    sns.despine(ax=ax)
+
+    # Save figure
+    if save_fname:
+        plt.savefig(save_fname, bbox_inches="tight", dpi=300)
+    return
 
 
 def plot_paired_ttests(
