@@ -8,7 +8,7 @@ from train_and_test_iem import fit_iem_desired_params
 from plot_iem_results import (
     plot_ctf_slope_time_courses,
     compare_params_ctf_time_courses,
-    plot_paired_ttests,
+    plot_ctf_slope_paired_ttest,
 )
 
 if __name__ == "__main__":
@@ -32,9 +32,28 @@ if __name__ == "__main__":
         plt_errorbars=True,
     )
 
-    # Plot paired t-tests of CTF slopes for parameters from spectral
-    # parameterization model
-    plot_paired_ttests(ctf_slopes, ctf_slopes_null, t_arrays)
+    # Plot paired t-tests of CTF slopes for the aperiodic exponent in first
+    # 400 ms after presentation
+    cmap = plt.get_cmap("Paired")
+    plot_ctf_slope_paired_ttest(
+        ctf_slopes["exponent"],
+        t_arrays["exponent"],
+        (0.0, 0.4),
+        ctf_slopes_shuffled=ctf_slopes_null["exponent"],
+        palette=(cmap(3), cmap(2)),
+        save_fname="exp_ctf_slope_paired_t-test.png",
+    )
+
+    # Plot paired t-tests of CTF slopes for alpha oscillatory power in WM
+    pw_ctf_slope_fname = "pw_ctf_slope_paired_t-test.png"
+    plot_ctf_slope_paired_ttest(
+        ctf_slopes["linOscAUC"],
+        t_arrays["linOscAUC"],
+        "delay",
+        ctf_slopes_shuffled=ctf_slopes_null["linOscAUC"],
+        palette=(cmap(1), cmap(0)),
+        save_fname="pw_ctf_slope_paired_t-test.png",
+    )
 
     # Plot CTF slope time courses for relevant comparisons of parameters from
     # spectral parameterization model

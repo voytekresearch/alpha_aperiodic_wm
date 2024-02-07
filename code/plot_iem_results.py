@@ -156,6 +156,7 @@ def plot_ctf_slope_time_courses(
     ctf_slopes_contrast=None,
     contrast_label=None,
     contrast_vals=None,
+    plt_errorbars=False,
     subjects_by_task=params.SUBJECTS_BY_TASK,
     fig_dir=params.FIG_DIR,
     task_timings=params.TASK_TIMINGS,
@@ -211,7 +212,7 @@ def plot_ctf_slope_time_courses(
                 "palette": palette,
                 "param_names": param_names_param_set,
                 "plot_timings": plt_timings,
-                "plot_errorbars": False,
+                "plot_errorbars": plt_errorbars,
                 "ax": ax,
             }
             if ctf_slopes_contrast is not None:
@@ -238,7 +239,7 @@ def plot_ctf_slope_time_courses(
     labels = [l for i, l in enumerate(labels) if i not in remove_idx]
     ax_legend = fig.add_subplot(gs[-1, -1])
     ax_legend.axis("off")
-    ax_legend.legend(handles, labels, loc="center", fontsize=24)
+    ax_legend.legend(handles, labels, loc="center", ncol=2, fontsize=24)
 
     # Add title
     fig.suptitle(title, fontsize=64, fontweight="bold", y=1.05)
@@ -328,6 +329,7 @@ def plot_ctf_slope_paired_ttest(
     palette=None,
     save_fname=None,
     task_timings=params.TASK_TIMINGS,
+    fig_dir=params.FIG_DIR,
 ):
     """Plot paired t-tests of channel tuning function (CTF) slope averaged
     time window for multiple parameters.
@@ -407,35 +409,7 @@ def plot_ctf_slope_paired_ttest(
 
     # Save figure
     if save_fname:
+        os.makedirs(fig_dir, exist_ok=True)
+        save_fname = f"{fig_dir}/{save_fname}"
         plt.savefig(save_fname, bbox_inches="tight", dpi=300)
     return
-
-
-def plot_paired_ttests(
-    ctf_slopes_all_params, ctf_slopes_null_all_params, t_all_params
-):
-    """Plot paired t-tests of CTF slopes for desired parameters from spectral
-    parameterization model."""
-    # Plot paired t-tests of CTF slopes for the aperiodic exponent in first
-    # 400 ms after presentation
-    exp_ctf_slope_fname = f"{params.FIG_DIR}/exp_ctf_slope_paired_t-test.png"
-    cmap = plt.get_cmap("Paired")
-    plot_ctf_slope_paired_ttest(
-        ctf_slopes_all_params["exponent"],
-        t_all_params["exponent"],
-        (0.0, 0.4),
-        ctf_slopes_shuffled=ctf_slopes_null_all_params["exponent"],
-        palette=(cmap(3), cmap(2)),
-        save_fname=exp_ctf_slope_fname,
-    )
-
-    # Plot paired t-tests of CTF slopes for alpha oscillatory power in WM
-    pw_ctf_slope_fname = f"{params.FIG_DIR}/pw_ctf_slope_paired_t-test.png"
-    plot_ctf_slope_paired_ttest(
-        ctf_slopes_all_params["PW"],
-        t_all_params["PW"],
-        "delay",
-        ctf_slopes_shuffled=ctf_slopes_null_all_params["PW"],
-        palette=(cmap(1), cmap(0)),
-        save_fname=pw_ctf_slope_fname,
-    )
