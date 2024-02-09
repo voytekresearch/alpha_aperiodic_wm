@@ -21,13 +21,16 @@ def split_trials(
     channels=None,
     bottom_frac=0.5,
     top_frac=0.5,
+    metadata=False,
     param_dir=params.SPARAM_DIR,
     task_timings=params.TASK_TIMINGS,
     subjects_by_task=params.SUBJECTS_BY_TASK,
 ):
     "Split trials based on given criterion."
     # Load parameterized data
-    epochs, times, _, param_data = load_param_data(subj, param, param_dir)
+    epochs, times, _, param_data = load_param_data(
+        subj, param, param_dir, metadata=metadata
+    )
 
     # Parse subject ID
     experiment, subj_num = subj.split("_")
@@ -38,46 +41,56 @@ def split_trials(
         ]
     )
 
-    windowed_data = []
-    for one_t_window in (baseline_t_window, t_window):
-        # Skip if no time window
-        if one_t_window is None:
-            continue
+    # Chunk by time window if desired
+    processed_data = param_data
+    if t_window is not None:
+        windowed_data = []
+        for one_t_window in (baseline_t_window, t_window):
+            # Skip if no time window
+            if one_t_window is None:
+                continue
 
-        # Parse time window
-        if one_t_window == "baseline":
-            one_t_window = (times[0], 0.0)
-        elif one_t_window == "stimulus":
-            one_t_window = (0.0, task_timings[task_num][1])
-        elif one_t_window == "delay":
-            one_t_window = task_timings[task_num]
-        elif one_t_window == "response":
-            one_t_window = (task_timings[task_num][1], times[-1])
+            # Parse time window
+            if one_t_window == "baseline":
+                one_t_window = (times[0], 0.0)
+            elif one_t_window == "stimulus":
+                one_t_window = (0.0, task_timings[task_num][1])
+            elif one_t_window == "delay":
+                one_t_window = task_timings[task_num]
+            elif one_t_window == "response":
+                one_t_window = (task_timings[task_num][1], times[-1])
 
-        # Average across time window
-        t_window_idx = np.where(
-            (times >= one_t_window[0]) & (times <= one_t_window[1])
-        )[0]
-        windowed_data.append(np.mean(param_data[:, :, t_window_idx], axis=-1))
+            # Average across time window
+            t_window_idx = np.where(
+                (times >= one_t_window[0]) & (times <= one_t_window[1])
+            )[0]
+            windowed_data.append(
+                np.mean(param_data[:, :, t_window_idx], axis=-1)
+            )
 
-    # Perform operation between time windows
-    processed_data = windowed_data[0]
-    if len(windowed_data) == 2:
-        if operation == "-":
-            processed_data = windowed_data[1] - windowed_data[0]
-        elif operation == "/":
-            processed_data = windowed_data[1] / windowed_data[0]
+        # Perform operation between time windows
+        processed_data = windowed_data[0]
+        if len(windowed_data) == 2:
+            if operation == "-":
+                processed_data = windowed_data[1] - windowed_data[0]
+            elif operation == "/":
+                processed_data = windowed_data[1] / windowed_data[0]
 
     # Subset channels if desired
     if channels is not None:
         ch_mask = np.isin(epochs.ch_names, channels)
         processed_data = processed_data[:, ch_mask]
 
-    # Average across channels
-    processed_data = np.mean(processed_data, axis=-1)
+    # Average across channels if multi-dimensional
+    if processed_data.ndim > 1:
+        processed_data = np.mean(processed_data, axis=-1)
+
+    # Remove None values
+    processed_data = np.array(list(filter(None, processed_data)))
 
     # Sort trials by parameterized data
     sorted_idx = np.argsort(processed_data)
+    np.save(f"error.npy", processed_data)
 
     # Split trials into top and bottom percentiles
     n_trials = len(sorted_idx)
@@ -92,6 +105,7 @@ def load_param_data(
     subj,
     param,
     param_dir,
+    metadata=False,
     epochs_dir=params.EPOCHS_DIR,
     sparam_dir=params.SPARAM_DIR,
     decim_factor=params.DECIM_FACTOR,
@@ -147,6 +161,11 @@ def load_param_data(
     times = epochs.times
     if param != "total_power":
         times = epochs.times[::decim_factor]
+
+    # If metadata, grab from epochs object
+    if metadata:
+        param_data = epochs.metadata[param].values
+        return epochs, times, pos_data, param_data
 
     # Load parameterized data
     param_data = mne.read_epochs(
@@ -350,6 +369,14 @@ def train_and_test_one_subj(
     if trial_split_criterion is not None:
         tags = ("high", "low")
         trials_high, trials_low = split_trials(subj, **trial_split_criterion)
+        split_param = trial_split_criterion["param"]
+
+        # Skip processing if no trials in one category
+        if len(trials_high) == 0 or len(trials_low) == 0:
+            print(f"Not enough {split_param} data for trial split with {subj}")
+            return
+
+        # Split data based on trial split
         pos_data_set = (
             pos_data[trials_high],
             pos_data[trials_low],
@@ -358,14 +385,17 @@ def train_and_test_one_subj(
             param_data[trials_high],
             param_data[trials_low],
         )
-        split_param = trial_split_criterion["param"]
-        split_t_window = trial_split_criterion["t_window"]
+
+        # Make directories specific to parameter and trial split (if there is
+        # one)
+        output_dir = f"{output_dir}/{split_param}"
+        if "t_window" in trial_split_criterion:
+            split_t_window = trial_split_criterion["t_window"]
+            if split_t_window is not None:
+                output_dir = f"{output_dir}_{split_t_window}"
         split_baseline = None
         if "baseline_t_window" in trial_split_criterion:
             split_baseline = trial_split_criterion["baseline_t_window"]
-        output_dir = os.path.join(
-            output_dir, f"{split_param}_{split_t_window}"
-        )
         if split_baseline is not None:
             operation = "diff"
             if "operation" in trial_split_criterion:
@@ -436,7 +466,7 @@ def train_and_test_one_subj(
             f"Fit IEMs on {param} data for {subj} in "
             f"{time.time() - start:.3f} s"
         )
-    return times
+    return
 
 
 def load_one_subj(

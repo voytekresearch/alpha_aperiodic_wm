@@ -173,7 +173,7 @@ def plot_ctf_slope_time_courses(
 
     # Create a GridSpec with one row and the number of tasks as columns
     num_tasks = len(subjects_by_task)
-    fig = plt.figure(figsize=(48, 20), constrained_layout=True)
+    fig = plt.figure(figsize=(48, 15), constrained_layout=True)
     gs = gridspec.GridSpec(2, num_tasks // 2 + 1, figure=fig)
 
     # Plot CTF slope time courses for parameters from spectral parameterization
