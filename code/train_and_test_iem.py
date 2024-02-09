@@ -81,9 +81,10 @@ def split_trials(
         ch_mask = np.isin(epochs.ch_names, channels)
         processed_data = processed_data[:, ch_mask]
 
-    # Average across channels if multi-dimensional
+    # Average across channels if 2D and across channels and time if 3D
     if processed_data.ndim > 1:
-        processed_data = np.mean(processed_data, axis=-1)
+        axis = tuple(-np.arange(processed_data.ndim)[1:])
+        processed_data = np.mean(processed_data, axis=axis)
 
     # Remove None values
     processed_data = np.array(list(filter(None, processed_data)))
