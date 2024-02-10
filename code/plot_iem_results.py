@@ -257,15 +257,19 @@ def compare_params_ctf_time_courses(
     ctf_slopes_all_params,
     ctf_slopes_null_all_params,
     t_all_params,
+    sparam_dir=params.SPARAM_DIR,
 ):
     """Compare CTF slope time courses for different parameters from spectral
     parameterization model."""
-    all_params = [
-        f.split("_")[-2]
-        for f in os.listdir(params.SPARAM_DIR)
-        if f.endswith(".fif")
-    ]
+    # Get set of all parameters
+    all_params = {
+        f.split("_")[-2] for f in os.listdir(sparam_dir) if f.endswith(".fif")
+    }
+
+    # Sort and add total power to all parameters
     all_params = sorted(all_params + ["total_power"])
+
+    # Get sets of parameters to compare
     log_params = [p for p in all_params if "log" in p]
     lin_params = [p for p in all_params if "lin" in p]
     subj_params = [p for p in all_params if "Subj" in p]
@@ -287,7 +291,11 @@ def compare_params_ctf_time_courses(
         [tot_params, osc_params],
         [error_params, fit_params],
     ]
+
+    # Get palettes for comparison
     comp_palettes = ["PiYG", "BrBG", "PuOr", "RdBu"]
+
+    # Define names and titles for comparisons
     comp_names = [
         "log_vs_lin",
         "subj_vs_non_subj",
@@ -303,19 +311,23 @@ def compare_params_ctf_time_courses(
     for comp_set, comp_palette, comp_name, comp_title in zip(
         comp_sets, comp_palettes, comp_names, comp_titles
     ):
+        # Get palettes for comparison
+        palettes = [
+            cmr.take_cmap_colors(
+                comp_palette, len(comp_set[0]), cmap_range=(0.0, 0.35)
+            ),
+            cmr.take_cmap_colors(
+                comp_palette, len(comp_set[1]), cmap_range=(0.65, 1.0)
+            ),
+        ]
+
+        # Plot CTF slope time courses for comparison
         plot_ctf_slope_time_courses(
             ctf_slopes_all_params,
             t_all_params,
             ctf_slopes_contrast=ctf_slopes_null_all_params,
             param_sets=comp_set,
-            palettes=[
-                cmr.take_cmap_colors(
-                    comp_palette, len(comp_set[0]), cmap_range=(0.0, 0.35)
-                ),
-                cmr.take_cmap_colors(
-                    comp_palette, len(comp_set[1]), cmap_range=(0.65, 1.0)
-                ),
-            ],
+            palettes=palettes,
             name=comp_name,
             title=comp_title,
         )
