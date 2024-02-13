@@ -188,6 +188,10 @@ def plot_ctf_slope_time_courses(
             }
         t = {k: v[task_num] for k, v in t_all_params.items()}
 
+        # Skip if no data for task
+        if sum([len(v) for v in ctf_slopes_one_task.values()]) == 0:
+            continue
+
         # Get the corresponding subplot from the GridSpec
         ax = fig.add_subplot(gs[task_num % 2, task_num // 2])
 
@@ -267,7 +271,7 @@ def compare_params_ctf_time_courses(
     }
 
     # Sort and add total power to all parameters
-    all_params = sorted(all_params + ["total_power"])
+    all_params = sorted(list(all_params) + ["total_power"])
 
     # Get sets of parameters to compare
     log_params = [p for p in all_params if "log" in p]
