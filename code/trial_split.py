@@ -1,5 +1,6 @@
 """Split trials based on selection criteria and re-train IEMs on those trial 
 splits."""
+
 # Import necessary modules
 import numpy as np
 from train_and_test_iem import fit_iem_desired_params
@@ -95,4 +96,34 @@ if __name__ == "__main__":
         ["exponent", "linOscAUC", "total_power"],
         total_power_change_dct,
         "Total Power Change",
+    )
+
+    # Split trials based on N1 amplitude
+    print("\nHIGH/LOW N1 AMPLITUDE")
+    error_dct = {
+        "param": "n1amp",
+        "param_dir": params.ERP_DIR,
+        "t_window": None,
+        "bottom_frac": 0.25,
+        "top_frac": 0.25,
+    }
+    split_trials_on_param(
+        ["exponent", "linOscAUC", "total_power"],
+        error_dct,
+        "N1 Amplitude",
+    )
+
+    # Split trials based on behavior
+    print("\nHIGH/LOW ERROR")
+    error_dct = {
+        "param": "error",
+        "t_window": None,
+        "bottom_frac": 0.25,
+        "top_frac": 0.25,
+        "metadata": True,
+    }
+    split_trials_on_param(
+        ["exponent", "linOscAUC", "total_power"],
+        error_dct,
+        "Performance",
     )
