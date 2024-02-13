@@ -176,11 +176,12 @@ def load_param_data(
     return epochs, times, pos_data, param_data
 
 
-def average_param_data_within_trial_blocks(
-    epochs, times, pos_data, param_data, n_blocks=params.N_BLOCKS
+def equalize_param_data_across_trial_blocks(
+    epochs, times, pos_data, param_data, average=True, n_blocks=params.N_BLOCKS
 ):
-    """Averaging parameterized data across trials within a block for each
-    location bin.
+    """Equalize parameterized data across trials blocks such that there are an
+    equal number of trials for each location bin. Then, average across trials
+    for each location bin if desired.
 
     Parameters
     ----------
@@ -192,6 +193,8 @@ def average_param_data_within_trial_blocks(
         Dictionary containing positional data.
     param_data : np.ndarray
         Array containing parameterized data for decoding.
+    average : bool (default: True)
+        Whether to average across trials for each location bin.
     n_blocks : int (default: params.N_BLOCKS)
         Number of blocks to split trials into.
 
@@ -208,33 +211,43 @@ def average_param_data_within_trial_blocks(
 
     # Determine number of trials per location bin
     _, counts = np.unique(pos_data, return_counts=True)
-    n_trials_per_bin = counts.min() // n_blocks * n_blocks
+    n_trials_per_bin_per_block = counts.min() // n_blocks
+    n_trials_per_bin = n_trials_per_bin_per_block * n_blocks
     idx_split_by_vals = np.split(
         np.argsort(pos_data), np.where(np.diff(sorted(pos_data)))[0] + 1
     )
 
     # Calculate parameterized data for block of trials
-    param_arr = np.zeros((n_blocks, n_bins, n_channels, n_timepts))
+    n_segments = n_bins
+    if not average:
+        n_segments *= n_trials_per_bin_per_block
+    param_arr = np.zeros((n_segments, n_blocks, n_channels, n_timepts))
 
     for i, val_split in enumerate(idx_split_by_vals):
         # Randomly permute indices
         idx = np.random.permutation(val_split)[:n_trials_per_bin]
 
-        # Average parameterized data across block of trials
-        block_avg = np.real(
-            np.nanmean(
-                param_data[idx, :, :].reshape(
-                    -1, n_blocks, n_channels, n_timepts
-                ),
-                axis=0,
-            )
+        # Split parameterized data across block of trials
+        split_data = param_data[idx, :, :].reshape(
+            -1, n_blocks, n_channels, n_timepts
         )
 
+        # Average across trials for each location bin if desired
+        if average:
+            split_data = np.nanmean(split_data, axis=0)
+
+        # Take only real component of data
+        blocked_data = np.real(split_data)
+
         # Add block-averaged parameterized data to array
-        param_arr[:, i, :, :] = block_avg
+        start_idx = i * n_trials_per_bin_per_block
+        end_idx = (i + 1) * n_trials_per_bin_per_block
+        if average:
+            start_idx, end_idx = i, i + 1
+        param_arr[start_idx:end_idx, :, :, :] = blocked_data
 
     # Rearrange axes of data to work for IEM pipeline
-    param_arr = np.moveaxis(param_arr, 2, 0)
+    param_arr = np.swapaxes(param_arr, 0, 2)
     return param_arr
 
 
@@ -325,6 +338,7 @@ def train_and_test_one_subj(
     n_blocks=params.N_BLOCKS,
     n_block_iters=params.N_BLOCK_ITERS,
     output_dir=params.IEM_OUTPUT_DIR,
+    single_trials=True,
     verbose=True,
 ):
     """Train and test one subject.
@@ -430,8 +444,9 @@ def train_and_test_one_subj(
         ctf_slope_null = np.zeros((n_block_iters, n_blocks, n_timepts))
         for block_iter in range(n_block_iters):
             # Average parameterized data within trial blocks
-            param_arr = average_param_data_within_trial_blocks(
-                epochs, times, pos_data, param_data
+            average = not single_trials
+            param_arr = equalize_param_data_across_trial_blocks(
+                epochs, times, pos_data, param_data, average=average
             )
 
             # Iterate through blocks
@@ -443,8 +458,13 @@ def train_and_test_one_subj(
                 test_data = param_arr[:, test_block_num, :, :]
 
                 # Create labels for training and testing
-                train_labels = np.tile(IEM().channel_centers, 2)
-                test_labels = IEM().channel_centers
+                base_labels = IEM().channel_centers
+                if single_trials:
+                    # Infer number of trials per location bin per block
+                    n_trials_per_bin = test_data.shape[1] // len(base_labels)
+                    base_labels = np.repeat(base_labels, n_trials_per_bin)
+                train_labels = np.tile(base_labels, n_blocks - 1)
+                test_labels = base_labels
 
                 # Train IEMs for block of data, with no shuffle
                 ctf_slope[block_iter, test_block_num, :] = iem_one_block(
@@ -502,6 +522,7 @@ def train_and_test_all_subjs(
     param_dir,
     trial_split_criterion=None,
     output_dir=params.IEM_OUTPUT_DIR,
+    single_trials=False,
 ):
     """Train and test for all subjects.
 
@@ -534,6 +555,7 @@ def train_and_test_all_subjs(
             param_dir,
             trial_split_criterion=trial_split_criterion,
             output_dir=output_dir,
+            single_trials=single_trials,
         )
 
 
@@ -708,6 +730,7 @@ def fit_iem_desired_params(
     trial_split_criterion=None,
     verbose=True,
     output_dir=params.IEM_OUTPUT_DIR,
+    single_trials=False,
 ):
     """Fit inverted encoding model (IEM) for total power and all parameters from
     spectral parameterization."""
@@ -736,6 +759,7 @@ def fit_iem_desired_params(
             param_dir,
             trial_split_criterion=trial_split_criterion,
             output_dir=output_dir,
+            single_trials=single_trials,
         )
         if verbose:
             print(f"Fit IEMs for {sp_param} in {time.time() - start:.2f} s")
