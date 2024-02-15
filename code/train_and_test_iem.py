@@ -315,19 +315,49 @@ def iem_one_block(
         list(np.rollaxis(data, time_axis)) for data in (train_data, test_data)
     ]
 
-    # Make arguments for multiprocessing such that each function call will
-    # contain training and testing data and labels for one time point
-    args = tuple(
-        [
-            (train_data_one_tp, train_labels, test_data_one_tp, test_labels)
-            for train_data_one_tp, test_data_one_tp in zip(*data_one_tp)
-        ]
-    )
-
-    # Parallelize training and testing of IEM across time points
-    with mp.Pool() as pool:
-        ctf_slope = pool.starmap(iem_one_timepoint, args)
+    # Train and test IEM for each time point
+    ctf_slope = []
+    for train_data_one_tp, test_data_one_tp in zip(*data_one_tp):
+        ctf_slope_one_tp = iem_one_timepoint(
+            train_data_one_tp, train_labels, test_data_one_tp, test_labels
+        )
+        ctf_slope.append(ctf_slope_one_tp)
     return np.array(ctf_slope)
+
+
+def iem_one_block_set(
+    param_arr, n_timepts, n_blocks=params.N_BLOCKS, single_trials=False
+):
+    # Iterate through blocks
+    ctf_slope = np.zeros((n_blocks, n_timepts))
+    ctf_slope_null = np.zeros((n_blocks, n_timepts))
+    for test_block_num in range(n_blocks):
+        # Split into training and testing data
+        train_data = np.delete(param_arr, test_block_num, axis=1).reshape(
+            param_arr.shape[0], -1, param_arr.shape[-1]
+        )
+        test_data = param_arr[:, test_block_num, :, :]
+
+        # Create labels for training and testing
+        base_labels = IEM().channel_centers
+        if single_trials:
+            # Infer number of trials per location bin per block
+            n_trials_per_bin = test_data.shape[1] // len(base_labels)
+            base_labels = np.repeat(base_labels, n_trials_per_bin)
+        train_labels = np.tile(base_labels, n_blocks - 1)
+        test_labels = base_labels
+
+        # Train IEMs for block of data, with no shuffle
+        ctf_slope[test_block_num, :] = iem_one_block(
+            train_data, train_labels, test_data, test_labels
+        )
+
+        # Train IEMs for block of data, with shuffle
+        train_labels_shuffled = np.random.permutation(train_labels)
+        ctf_slope_null[test_block_num, :] = iem_one_block(
+            train_data, train_labels_shuffled, test_data, test_labels
+        )
+    return ctf_slope, ctf_slope_null
 
 
 def train_and_test_one_subj(
@@ -335,10 +365,9 @@ def train_and_test_one_subj(
     param,
     param_dir,
     trial_split_criterion=None,
-    n_blocks=params.N_BLOCKS,
     n_block_iters=params.N_BLOCK_ITERS,
     output_dir=params.IEM_OUTPUT_DIR,
-    single_trials=True,
+    single_trials=False,
     verbose=True,
 ):
     """Train and test one subject.
@@ -440,42 +469,25 @@ def train_and_test_one_subj(
         # Iterate through sets of blocks
         did_fitting = True
         n_timepts = len(times)
-        ctf_slope = np.zeros((n_block_iters, n_blocks, n_timepts))
-        ctf_slope_null = np.zeros((n_block_iters, n_blocks, n_timepts))
-        for block_iter in range(n_block_iters):
-            # Average parameterized data within trial blocks
-            average = not single_trials
-            param_arr = equalize_param_data_across_trial_blocks(
-                epochs, times, pos_data, param_data, average=average
+
+        # Average parameterized data within trial blocks
+        param_arrs = [
+            equalize_param_data_across_trial_blocks(
+                epochs, times, pos_data, param_data, average=not single_trials
             )
+            for _ in range(n_block_iters)
+        ]
 
-            # Iterate through blocks
-            for test_block_num in range(n_blocks):
-                # Split into training and testing data
-                train_data = np.delete(
-                    param_arr, test_block_num, axis=1
-                ).reshape(param_arr.shape[0], -1, param_arr.shape[-1])
-                test_data = param_arr[:, test_block_num, :, :]
-
-                # Create labels for training and testing
-                base_labels = IEM().channel_centers
-                if single_trials:
-                    # Infer number of trials per location bin per block
-                    n_trials_per_bin = test_data.shape[1] // len(base_labels)
-                    base_labels = np.repeat(base_labels, n_trials_per_bin)
-                train_labels = np.tile(base_labels, n_blocks - 1)
-                test_labels = base_labels
-
-                # Train IEMs for block of data, with no shuffle
-                ctf_slope[block_iter, test_block_num, :] = iem_one_block(
-                    train_data, train_labels, test_data, test_labels
-                )
-
-                # Train IEMs for block of data, with shuffle
-                train_labels_shuffled = np.random.permutation(train_labels)
-                ctf_slope_null[block_iter, test_block_num, :] = iem_one_block(
-                    train_data, train_labels_shuffled, test_data, test_labels
-                )
+        # Train and test IEMs for each block iteration using multiprocessing
+        ctf_slope_lst, ctf_slope_null_lst = [], []
+        for param_arr in param_arrs:
+            one_block_set = iem_one_block_set(
+                param_arr, n_timepts, single_trials=single_trials
+            )
+            ctf_slope_lst.append(one_block_set[0])
+            ctf_slope_null_lst.append(one_block_set[1])
+        ctf_slope = np.stack(ctf_slope_lst)
+        ctf_slope_null = np.stack(ctf_slope_null_lst)
 
         # Average across blocks and block iterations
         mean_ctf_slope = np.mean(ctf_slope, axis=(0, 1))
