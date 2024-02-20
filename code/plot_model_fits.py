@@ -12,29 +12,29 @@ import matplotlib.gridspec as gridspec
 import params
 
 
-def plot_ctf_slope(
-    ctf_slopes,
+def plot_model_fit(
+    model_fits,
     t_arrays,
     task_num,
     task_timings,
-    ctf_slopes_contrast=None,
+    model_fits_contrast=None,
     param_names=None,
     contrast_label="Shuffled location labels?",
     contrast_vals=("No", "Yes"),
+    model_output_name="CTF slope",
     palette=None,
     save_fname=None,
     plot_timings=True,
     plot_errorbars=False,
     ax=None,
 ):
-    """Plot channel tuning function (CTF) across time for multiple
-    parameters.
+    """Plot model fits across time for multiple parameters.
 
     Parameters
     ----------
-    ctf_slopes : dict
-        Dictionary containing CTF slopes for each parameter. Keys are parameter
-        names and values are arrays containing CTF slopes.
+    model_fits : dict
+        Dictionary containing model fits for each parameter. Keys are parameter
+        names and values are arrays containing model fits.
     t_arr : np.ndarray
         Array containing time points.
     palette : dict (default: None)
@@ -45,53 +45,57 @@ def plot_ctf_slope(
     """
     # Set default parameter names
     if param_names is None:
-        param_names = {k: k for k in ctf_slopes.keys()}
+        param_names = {k: k for k in model_fits.keys()}
 
-    # Make empty list for CTF slope DataFrames
-    ctf_slopes_dfs = []
+    # Make empty list for model fit DataFrames
+    model_fits_dfs = []
 
-    # Make DataFrame of CTF slopes by time for each parameter
-    for t_one_param, (param, ctf_slopes_one_param) in zip(
-        t_arrays.values(), ctf_slopes.items()
+    # Make DataFrame of model fits by time for each parameter
+    for t_one_param, (param, model_fits_one_param) in zip(
+        t_arrays.values(), model_fits.items()
     ):
-        n = ctf_slopes_one_param.shape[0]
-        one_param_df = pd.DataFrame(ctf_slopes_one_param, columns=t_one_param)
+        n = model_fits_one_param.shape[0]
+        one_param_df = pd.DataFrame(model_fits_one_param, columns=t_one_param)
         one_param_df["Parameter"] = param_names[param]
         one_param_df = one_param_df.melt(
-            id_vars=["Parameter"], var_name="Time (s)", value_name="CTF slope"
+            id_vars=["Parameter"],
+            var_name="Time (s)",
+            value_name=model_output_name,
         )
         one_param_df[contrast_label] = contrast_vals[0]
 
-        # Add DataFrame of CTF slopes for shuffled location labels if desired
-        if ctf_slopes_contrast is not None:
+        # Add DataFrame of model fits for shuffled location labels if desired
+        if model_fits_contrast is not None:
             one_param_df_contrast = pd.DataFrame(
-                ctf_slopes_contrast[param], columns=t_one_param
+                model_fits_contrast[param], columns=t_one_param
             )
             one_param_df_contrast["Parameter"] = param_names[param]
             one_param_df_contrast = one_param_df_contrast.melt(
                 id_vars=["Parameter"],
                 var_name="Time (s)",
-                value_name="CTF slope",
+                value_name=model_output_name,
             )
             one_param_df_contrast[contrast_label] = contrast_vals[1]
             one_param_df = pd.concat(
                 (one_param_df, one_param_df_contrast), axis=0
             )
-        ctf_slopes_dfs.append(one_param_df)
+        model_fits_dfs.append(one_param_df)
 
-    # Combine DataFrames of CTF slopes for each parameter into one big DataFrame
-    ctf_slopes_big_df = pd.concat(ctf_slopes_dfs).reset_index()
+    # Combine DataFrames of model fits for each parameter into one big DataFrame
+    model_fits_big_df = pd.concat(model_fits_dfs).reset_index()
 
-    # Plot CTF slope time course for each parameter
+    # Plot model fit time course for each parameter
     if ax is None:
         _, ax = plt.subplots(1, 1, figsize=(10, 6))
-    ctf_slopes_big_df["CTF slope"] = -ctf_slopes_big_df["CTF slope"]
+    model_fits_big_df[model_output_name] = -model_fits_big_df[
+        model_output_name
+    ]
     ci = 95 if plot_errorbars else None
     ax = sns.lineplot(
-        data=ctf_slopes_big_df,
+        data=model_fits_big_df,
         hue="Parameter",
         x="Time (s)",
-        y="CTF slope",
+        y=model_output_name,
         style=contrast_label,
         palette=palette,
         legend="brief",
@@ -135,7 +139,7 @@ def plot_ctf_slope(
         y=1.08,
     )
     ax.set_xlabel("Time (s)", size=28)
-    ax.set_ylabel("CTF slope", size=28)
+    ax.set_ylabel(model_output_name, size=28)
     ax.tick_params(labelsize=20)
     sns.despine(ax=ax)
 
@@ -145,71 +149,72 @@ def plot_ctf_slope(
         plt.close()
 
 
-def plot_ctf_slope_time_courses(
-    ctf_slopes_all_params,
+def plot_model_fit_time_courses(
+    model_fits_all_params,
     t_all_params,
     param_sets=None,
     palettes=None,
     param_names=None,
     name="",
     title="",
-    ctf_slopes_contrast=None,
+    model_fits_contrast=None,
     contrast_label=None,
     contrast_vals=None,
     plt_errorbars=False,
+    model_output_name="CTF slope",
     subjects_by_task=params.SUBJECTS_BY_TASK,
     fig_dir=params.FIG_DIR,
     task_timings=params.TASK_TIMINGS,
 ):
-    """Plot CTF slope time courses for total power and parameters from spectral
+    """Plot model fit time courses for total power and parameters from spectral
     parameterization."""
     # Set default parameter sets, palettes, and parameter names
     if param_sets is None:
-        param_sets = [list(ctf_slopes_all_params.keys())]
+        param_sets = [list(model_fits_all_params.keys())]
     if palettes is None:
         palettes = ["rocket"]
     if param_names is None:
-        param_names = {k: k for k in ctf_slopes_all_params.keys()}
+        param_names = {k: k for k in model_fits_all_params.keys()}
 
     # Create a GridSpec with one row and the number of tasks as columns
     num_tasks = len(subjects_by_task)
     fig = plt.figure(figsize=(48, 15), constrained_layout=True)
     gs = gridspec.GridSpec(2, num_tasks // 2 + 1, figure=fig)
 
-    # Plot CTF slope time courses for parameters from spectral parameterization
+    # Plot model fit time courses for parameters from spectral parameterization
     # model
     for task_num in range(len(subjects_by_task)):
-        ctf_slopes_one_task = {
-            k: v[task_num] for k, v in ctf_slopes_all_params.items()
+        model_fits_one_task = {
+            k: v[task_num] for k, v in model_fits_all_params.items()
         }
-        if ctf_slopes_contrast is not None:
-            ctf_slopes_contrast_one_task = {
-                k: v[task_num] for k, v in ctf_slopes_contrast.items()
+        if model_fits_contrast is not None:
+            model_fits_contrast_one_task = {
+                k: v[task_num] for k, v in model_fits_contrast.items()
             }
         t = {k: v[task_num] for k, v in t_all_params.items()}
 
         # Skip if no data for task
-        if sum([len(v) for v in ctf_slopes_one_task.values()]) == 0:
+        if sum([len(v) for v in model_fits_one_task.values()]) == 0:
             continue
 
         # Get the corresponding subplot from the GridSpec
         ax = fig.add_subplot(gs[task_num % 2, task_num // 2])
 
-        # Plot CTF slope time courses for each parameter set and palette
+        # Plot model fit time courses for each parameter set and palette
         for i, (param_set, palette) in enumerate(zip(param_sets, palettes)):
-            # Get CTF slopes for parameter set
-            ctf_slopes_one_param_set = {
-                k: v for k, v in ctf_slopes_one_task.items() if k in param_set
+            # Get model fits for parameter set
+            model_fits_one_param_set = {
+                k: v for k, v in model_fits_one_task.items() if k in param_set
             }
-            if ctf_slopes_contrast is not None:
-                ctf_slopes_contrast_one_param_set = {
+            if model_fits_contrast is not None:
+                model_fits_contrast_one_param_set = {
                     k: v
-                    for k, v in ctf_slopes_contrast_one_task.items()
+                    for k, v in model_fits_contrast_one_task.items()
                     if k in param_set
                 }
             t_one_param_set = {k: v for k, v in t.items() if k in param_set}
 
-            # Plot CTF slope time courses for parameter set and palette
+            # Plot model fit time courses for parameter set and palette
             plt_timings = i == len(param_sets) - 1
             param_names_param_set = {k: param_names[k] for k in param_set}
             kwargs = {
@@ -218,17 +223,18 @@ def plot_ctf_slope_time_courses(
                 "plot_timings": plt_timings,
                 "plot_errorbars": plt_errorbars,
                 "ax": ax,
+                "model_output_name": model_output_name,
             }
-            if ctf_slopes_contrast is not None:
-                kwargs["ctf_slopes_contrast"] = (
-                    ctf_slopes_contrast_one_param_set
+            if model_fits_contrast is not None:
+                kwargs["model_fits_contrast"] = (
+                    model_fits_contrast_one_param_set
                 )
             if contrast_label is not None:
                 kwargs["contrast_label"] = contrast_label
             if contrast_vals is not None:
                 kwargs["contrast_vals"] = contrast_vals
-            plot_ctf_slope(
-                ctf_slopes_one_param_set,
+            plot_model_fit(
+                model_fits_one_param_set,
                 t_one_param_set,
                 task_num,
                 task_timings[task_num],
@@ -250,20 +256,21 @@ def plot_ctf_slope_time_courses(
 
     # Save figure
     os.makedirs(fig_dir, exist_ok=True)
-    ctf_slopes_fname = f"{fig_dir}/ctf_slopes.png"
+    model_fits_fname = f"{fig_dir}/model_fits.png"
     if len(name) > 0:
-        ctf_slopes_fname = ctf_slopes_fname.replace(".", f"_{name}.")
-    plt.savefig(ctf_slopes_fname, dpi=300, bbox_inches="tight")
+        model_fits_fname = model_fits_fname.replace(".", f"_{name}.")
+    plt.savefig(model_fits_fname, dpi=300, bbox_inches="tight")
     plt.close()
 
 
-def compare_params_ctf_time_courses(
-    ctf_slopes_all_params,
-    ctf_slopes_null_all_params,
+def compare_params_model_fit_time_courses(
+    model_fits_all_params,
+    model_fits_null_all_params,
     t_all_params,
+    model_output_name="CTF slope",
     sparam_dir=params.SPARAM_DIR,
 ):
-    """Compare CTF slope time courses for different parameters from spectral
+    """Compare model fit time courses for different parameters from spectral
     parameterization model."""
     # Get set of all parameters
     all_params = {
@@ -325,11 +332,12 @@ def compare_params_ctf_time_courses(
             ),
         ]
 
-        # Plot CTF slope time courses for comparison
-        plot_ctf_slope_time_courses(
-            ctf_slopes_all_params,
+        # Plot model fit time courses for comparison
+        plot_model_fit_time_courses(
+            model_fits_all_params,
             t_all_params,
-            ctf_slopes_contrast=ctf_slopes_null_all_params,
+            model_fits_contrast=model_fits_null_all_params,
+            model_output_name=model_output_name,
             param_sets=comp_set,
             palettes=palettes,
             name=comp_name,
@@ -337,22 +345,23 @@ def compare_params_ctf_time_courses(
         )
 
 
-def plot_ctf_slope_paired_ttest(
-    ctf_slopes,
+def plot_model_fit_paired_ttest(
+    model_fits,
     t_arrays,
     t_window,
-    ctf_slopes_shuffled=None,
+    model_fits_shuffled=None,
     palette=None,
+    model_output_name="CTF slope",
     save_fname=None,
     task_timings=params.TASK_TIMINGS,
     fig_dir=params.FIG_DIR,
 ):
-    """Plot paired t-tests of channel tuning function (CTF) slope averaged
-    time window for multiple parameters.
+    """Plot paired t-tests of model fits over averaged time window for multiple
+    parameters.
     """
-    # Make empty list for CTF slope DataFrames
-    ctf_slopes_dfs = []
-    for i, (ctf_slope, t_arr) in enumerate(zip(ctf_slopes, t_arrays)):
+    # Make empty list for model fit DataFrames
+    model_fits_dfs = []
+    for i, (model_fit, t_arr) in enumerate(zip(model_fits, t_arrays)):
         # If time window is None, use task timings
         if t_window == "delay":
             t_window = task_timings[i]
@@ -361,42 +370,42 @@ def plot_ctf_slope_paired_ttest(
         t_window_idx = np.where(
             (t_arr >= t_window[0]) & (t_arr <= t_window[1])
         )[0]
-        ctf_slope = -np.mean(ctf_slope[:, t_window_idx], axis=1)
-        if ctf_slopes_shuffled is not None:
-            ctf_slope_shuffled = -np.mean(
-                ctf_slopes_shuffled[i][:, t_window_idx], axis=1
+        model_fit = -np.mean(model_fit[:, t_window_idx], axis=1)
+        if model_fits_shuffled is not None:
+            model_fit_shuffled = -np.mean(
+                model_fits_shuffled[i][:, t_window_idx], axis=1
             )
 
-        # Make DataFrame of CTF slopes
-        ctf_slope_df = pd.DataFrame(
-            ctf_slope, columns=["CTF slope"]
+        # Make DataFrame of model fits
+        model_fit_df = pd.DataFrame(
+            model_fit, columns=[model_output_name]
         ).reset_index(names="trial")
-        ctf_slope_df.loc[:, "Shuffled location labels?"] = "No"
-        ctf_slope_df.loc[:, "Task"] = str(i + 1)
+        model_fit_df.loc[:, "Shuffled location labels?"] = "No"
+        model_fit_df.loc[:, "Task"] = str(i + 1)
 
-        # Add DataFrame of CTF slopes for shuffled location labels if desired
-        if ctf_slope_shuffled is not None:
-            ctf_slope_shuffled_df = pd.DataFrame(
-                ctf_slope_shuffled, columns=["CTF slope"]
+        # Add DataFrame of model fits for shuffled location labels if desired
+        if model_fit_shuffled is not None:
+            model_fit_shuffled_df = pd.DataFrame(
+                model_fit_shuffled, columns=[model_output_name]
             ).reset_index(names="trial")
-            ctf_slope_shuffled_df.loc[:, "Shuffled location labels?"] = "Yes"
-            ctf_slope_shuffled_df.loc[:, "Task"] = str(i + 1)
-            ctf_slope_df = pd.concat(
-                (ctf_slope_df, ctf_slope_shuffled_df), axis=0
+            model_fit_shuffled_df.loc[:, "Shuffled location labels?"] = "Yes"
+            model_fit_shuffled_df.loc[:, "Task"] = str(i + 1)
+            model_fit_df = pd.concat(
+                (model_fit_df, model_fit_shuffled_df), axis=0
             )
 
         # Add DataFrame to list
-        ctf_slopes_dfs.append(ctf_slope_df)
+        model_fits_dfs.append(model_fit_df)
 
-    # Combine DataFrames of CTF slopes from each task into one big DataFrame
-    ctf_slopes_big_df = pd.concat(ctf_slopes_dfs).reset_index()
+    # Combine DataFrames of model fits from each task into one big DataFrame
+    model_fits_big_df = pd.concat(model_fits_dfs).reset_index()
 
-    # Plot paired t-tests of CTF slopes for each task
+    # Plot paired t-tests of model fits for each task
     plt.figure(figsize=(10, 6))
     ax = sns.violinplot(
-        data=ctf_slopes_big_df,
+        data=model_fits_big_df,
         x="Task",
-        y="CTF slope",
+        y=model_output_name,
         split=True,
         hue="Shuffled location labels?",
         palette=palette,
@@ -404,14 +413,14 @@ def plot_ctf_slope_paired_ttest(
     )
     pairs = [
         ((str(task_num), "No"), (str(task_num), "Yes"))
-        for task_num in list(set(ctf_slopes_big_df["Task"]))
+        for task_num in list(set(model_fits_big_df["Task"]))
     ]
     annotator = Annotator(
         ax,
         pairs,
-        data=ctf_slopes_big_df,
+        data=model_fits_big_df,
         x="Task",
-        y="CTF slope",
+        y=model_output_name,
         hue="Shuffled location labels?",
         plot="violinplot",
     )

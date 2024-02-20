@@ -10,6 +10,9 @@ import pandas as pd
 import mne
 import params
 from iem import IEM
+from sklearn.linear_model import Ridge
+from sklearn.multioutput import MultiOutputRegressor
+from astropy.stats import circorrcoef
 
 
 def split_trials(
@@ -251,8 +254,8 @@ def equalize_param_data_across_trial_blocks(
     return param_arr
 
 
-def iem_one_timepoint(train_data, train_labels, test_data, test_labels):
-    """Estimate channel response function (CRF) for one block of training and
+def fit_iem(train_data, train_labels, test_data, test_labels):
+    """Estimate channel tuning function (CTF) for one block of training and
     testing data at one time point.
 
     Parameters
@@ -285,11 +288,52 @@ def iem_one_timepoint(train_data, train_labels, test_data, test_labels):
     return iem.ctf_slope
 
 
-def iem_one_block(
-    train_data, train_labels, test_data, test_labels, time_axis=-1
+def circ_ridge_regression(x_train, y_train, x_test, y_test):
+    """Perform circular ridge regression to predict spatial location from
+    spectral parameters of the EEG data."""
+    # Initialize the model
+    model = Ridge()
+
+    # Initialize the multi-output regressor
+    multi_output = MultiOutputRegressor(model)
+
+    # Transform the target variable to circular space
+    y_train_multi = np.array([np.sin(y_train), np.cos(y_train)]).T
+
+    # Fit the model
+    multi_output.fit(x_train, y_train_multi)
+
+    # Transform the prediction back to angle
+    prediction = multi_output.predict(x_test)
+    y_predicted = np.arctan2(prediction[:, 0], prediction[:, 1])
+
+    # Compute the circular correlation coefficient
+    circ_corr = circorrcoef(y_test, y_predicted)
+    return circ_corr
+
+
+def train_and_test_one_timepoint(
+    train_data, train_labels, test_data, test_labels, method="iem"
 ):
-    """Estimate channel response function (CRF) for one block of training and
-    testing data across all time points.
+    """Train and test given method for one time point."""
+    if method == "iem":
+        return fit_iem(train_data, train_labels, test_data, test_labels)
+    elif method == "crr":
+        return circ_ridge_regression(
+            train_data, train_labels, test_data, test_labels
+        )
+
+
+def train_and_test_one_block(
+    train_data,
+    train_labels,
+    test_data,
+    test_labels,
+    method="iem",
+    time_axis=-1,
+):
+    """Fit model for one block of training and testing data across all time
+    points.
 
     Parameters
     ----------
@@ -307,8 +351,8 @@ def iem_one_block(
 
     Returns
     -------
-    ctf_slope : np.ndarray
-        Array containing CTF slope from fitted IEM.
+    model_fit : np.ndarray
+        Array containing output from model fitting.
     """
     # Organize data into lists of arrays for each time point
     data_one_tp = [
@@ -316,21 +360,29 @@ def iem_one_block(
     ]
 
     # Train and test IEM for each time point
-    ctf_slope = []
+    model_fit = []
     for train_data_one_tp, test_data_one_tp in zip(*data_one_tp):
-        ctf_slope_one_tp = iem_one_timepoint(
-            train_data_one_tp, train_labels, test_data_one_tp, test_labels
+        model_fit_one_tp = train_and_test_one_timepoint(
+            train_data_one_tp,
+            train_labels,
+            test_data_one_tp,
+            test_labels,
+            method=method,
         )
-        ctf_slope.append(ctf_slope_one_tp)
-    return np.array(ctf_slope)
+        model_fit.append(model_fit_one_tp)
+    return np.array(model_fit)
 
 
-def iem_one_block_set(
-    param_arr, n_timepts, n_blocks=params.N_BLOCKS, single_trials=False
+def train_and_test_one_block_set(
+    param_arr,
+    n_timepts,
+    n_blocks=params.N_BLOCKS,
+    method="iem",
+    single_trials=False,
 ):
     # Iterate through blocks
-    ctf_slope = np.zeros((n_blocks, n_timepts))
-    ctf_slope_null = np.zeros((n_blocks, n_timepts))
+    model_fit = np.zeros((n_blocks, n_timepts))
+    model_fit_null = np.zeros((n_blocks, n_timepts))
     for test_block_num in range(n_blocks):
         # Split into training and testing data
         train_data = np.delete(param_arr, test_block_num, axis=1).reshape(
@@ -348,16 +400,20 @@ def iem_one_block_set(
         test_labels = base_labels
 
         # Train IEMs for block of data, with no shuffle
-        ctf_slope[test_block_num, :] = iem_one_block(
-            train_data, train_labels, test_data, test_labels
+        model_fit[test_block_num, :] = train_and_test_one_block(
+            train_data, train_labels, test_data, test_labels, method=method
         )
 
         # Train IEMs for block of data, with shuffle
         train_labels_shuffled = np.random.permutation(train_labels)
-        ctf_slope_null[test_block_num, :] = iem_one_block(
-            train_data, train_labels_shuffled, test_data, test_labels
+        model_fit_null[test_block_num, :] = train_and_test_one_block(
+            train_data,
+            train_labels_shuffled,
+            test_data,
+            test_labels,
+            method=method,
         )
-    return ctf_slope, ctf_slope_null
+    return model_fit, model_fit_null
 
 
 def train_and_test_one_subj(
@@ -367,6 +423,7 @@ def train_and_test_one_subj(
     trial_split_criterion=None,
     n_block_iters=params.N_BLOCK_ITERS,
     output_dir=params.IEM_OUTPUT_DIR,
+    method="iem",
     single_trials=False,
     verbose=True,
 ):
@@ -391,8 +448,8 @@ def train_and_test_one_subj(
 
     Returns
     -------
-    ctf_slope : np.ndarray
-        Array containing CTF slope across time.
+    model_fit : np.ndarray
+        Array containing output from model fitting across time.
     times : np.ndarray
         Array containing time points.
     """
@@ -457,12 +514,12 @@ def train_and_test_one_subj(
         os.makedirs(save_dir, exist_ok=True)
 
         # Determine file names
-        ctf_slope_fname = f"{save_dir}/ctf_slope_{subj}.npy"
-        ctf_slope_null_fname = f"{save_dir}/ctf_slope_null_{subj}.npy"
+        model_fit_fname = f"{save_dir}/model_fit_{subj}.npy"
+        model_fit_null_fname = f"{save_dir}/model_fit_null_{subj}.npy"
 
         # Skip processing if already done
-        if os.path.exists(ctf_slope_fname) and os.path.exists(
-            ctf_slope_null_fname
+        if os.path.exists(model_fit_fname) and os.path.exists(
+            model_fit_null_fname
         ):
             continue
 
@@ -479,23 +536,26 @@ def train_and_test_one_subj(
         ]
 
         # Train and test IEMs for each block iteration using multiprocessing
-        ctf_slope_lst, ctf_slope_null_lst = [], []
+        model_fit_lst, model_fit_null_lst = [], []
         for param_arr in param_arrs:
-            one_block_set = iem_one_block_set(
-                param_arr, n_timepts, single_trials=single_trials
+            one_block_set = train_and_test_one_block_set(
+                param_arr,
+                n_timepts,
+                method=method,
+                single_trials=single_trials,
             )
-            ctf_slope_lst.append(one_block_set[0])
-            ctf_slope_null_lst.append(one_block_set[1])
-        ctf_slope = np.stack(ctf_slope_lst)
-        ctf_slope_null = np.stack(ctf_slope_null_lst)
+            model_fit_lst.append(one_block_set[0])
+            model_fit_null_lst.append(one_block_set[1])
+        model_fit = np.stack(model_fit_lst)
+        model_fit_null = np.stack(model_fit_null_lst)
 
         # Average across blocks and block iterations
-        mean_ctf_slope = np.mean(ctf_slope, axis=(0, 1))
-        mean_ctf_slope_null = np.mean(ctf_slope_null, axis=(0, 1))
+        mean_model_fit = np.mean(model_fit, axis=(0, 1))
+        mean_model_fit_null = np.mean(model_fit_null, axis=(0, 1))
 
         # Save data to avoid unnecessary re-processing
-        np.save(ctf_slope_fname, mean_ctf_slope)
-        np.save(ctf_slope_null_fname, mean_ctf_slope_null)
+        np.save(model_fit_fname, mean_model_fit)
+        np.save(model_fit_null_fname, mean_model_fit_null)
 
     # Print processing time if desired
     if verbose and did_fitting:
@@ -533,6 +593,7 @@ def train_and_test_all_subjs(
     param,
     param_dir,
     trial_split_criterion=None,
+    method="iem",
     output_dir=params.IEM_OUTPUT_DIR,
     single_trials=False,
 ):
@@ -549,8 +610,8 @@ def train_and_test_all_subjs(
 
     Returns
     -------
-    mean_ctf_slopes : np.ndarray
-        Array containing CTF slopes across subjects.
+    mean_model_fits : np.ndarray
+        Array containing outputs from model fitting across subjects.
     t_arr : np.ndarray
         Array containing time points.
     """
@@ -566,12 +627,13 @@ def train_and_test_all_subjs(
             param,
             param_dir,
             trial_split_criterion=trial_split_criterion,
+            method=method,
             output_dir=output_dir,
             single_trials=single_trials,
         )
 
 
-def load_one_subj(
+def load_model_fits_one_subj(
     subj,
     param,
     param_dir,
@@ -579,7 +641,7 @@ def load_one_subj(
     output_dir=params.IEM_OUTPUT_DIR,
     verbose=True,
 ):
-    """Load IEM data for one subject.
+    """Load model fit data for one subject.
 
     Parameters
     ----------
@@ -598,10 +660,10 @@ def load_one_subj(
 
     Returns
     -------
-    mean_ctf_slope : np.ndarray
-        Array containing CTF slope across time.
-    mean_ctf_slope_null : np.ndarray
-        Array containing null CTF slope across time.
+    mean_model_fit : np.ndarray
+        Array containing output from model fitting across time.
+    mean_model_fit_null : np.ndarray
+        Array containing null output from model fitting across time.
     """
     # Start timer
     start = time.time()
@@ -628,26 +690,26 @@ def load_one_subj(
                 operation = trial_split_criterion["operation"]
             output_dir = f"{output_dir}_{operation}_{split_baseline}"
 
-    mean_ctf_slope_dct, mean_ctf_slope_null_dct = {}, {}
+    mean_model_fit_dct, mean_model_fit_null_dct = {}, {}
     for tag in tags:
         # Determine file names
         load_dir = os.path.join(output_dir, param, tag)
-        ctf_slope_fname = f"{load_dir}/ctf_slope_{subj}.npy"
-        ctf_slope_null_fname = f"{load_dir}/ctf_slope_null_{subj}.npy"
+        model_fit_fname = f"{load_dir}/model_fit_{subj}.npy"
+        model_fit_null_fname = f"{load_dir}/model_fit_null_{subj}.npy"
 
         # Return if file does not exist
-        if not os.path.exists(ctf_slope_fname):
+        if not os.path.exists(model_fit_fname):
             return None, None, None
 
         # Load slope array
-        mean_ctf_slope = np.load(ctf_slope_fname)
+        mean_model_fit = np.load(model_fit_fname)
 
         # Load null slope array
-        mean_ctf_slope_null = np.load(ctf_slope_null_fname)
+        mean_model_fit_null = np.load(model_fit_null_fname)
 
         # Put into dictionaries
-        mean_ctf_slope_dct[tag] = mean_ctf_slope
-        mean_ctf_slope_null_dct[tag] = mean_ctf_slope_null
+        mean_model_fit_dct[tag] = mean_model_fit
+        mean_model_fit_null_dct[tag] = mean_model_fit_null
 
     # Print processing time if desired
     if verbose:
@@ -657,18 +719,18 @@ def load_one_subj(
         )
 
     if len(tags) > 1:
-        return mean_ctf_slope_dct, mean_ctf_slope_null_dct, times
-    return mean_ctf_slope, mean_ctf_slope_null, times
+        return mean_model_fit_dct, mean_model_fit_null_dct, times
+    return mean_model_fit, mean_model_fit_null, times
 
 
-def load_all_fit_iems(
+def load_all_model_fits(
     param,
     param_dir,
     trial_split_criterion=None,
     subjects_by_task=params.SUBJECTS_BY_TASK,
     output_dir=params.IEM_OUTPUT_DIR,
 ):
-    """Load IEM fits for all subjects.
+    """Load model fits for all subjects.
 
     Parameters
     ----------
@@ -681,8 +743,8 @@ def load_all_fit_iems(
 
     Returns
     -------
-    mean_ctf_slopes : np.ndarray
-        Array containing CTF slopes across subjects.
+    mean_model_fits : np.ndarray
+        Array containing outputs from model fitting across subjects.
     t_arr : np.ndarray
         Array containing time points.
     """
@@ -690,13 +752,13 @@ def load_all_fit_iems(
     # processed or excluded
     subjs = _get_subject_list(param, param_dir)
 
-    # Collate CTF slopes across subjects
-    mean_ctf_slopes = [[] for _ in range(len(subjects_by_task))]
-    mean_ctf_slopes_null = [[] for _ in range(len(subjects_by_task))]
+    # Collate outputs from model fitting across subjects
+    mean_model_fits = [[] for _ in range(len(subjects_by_task))]
+    mean_model_fits_null = [[] for _ in range(len(subjects_by_task))]
     t_arrays = [[] for _ in range(len(subjects_by_task))]
     for subj in subjs:
         # Add data to big arrays
-        mean_ctf_slope, mean_ctf_slope_null, t_arr = load_one_subj(
+        mean_model_fit, mean_model_fit_null, t_arr = load_model_fits_one_subj(
             subj,
             param,
             param_dir,
@@ -705,7 +767,7 @@ def load_all_fit_iems(
         )
 
         # Skip if no data
-        if mean_ctf_slope is None:
+        if mean_model_fit is None:
             continue
 
         # Parse subject ID
@@ -718,34 +780,35 @@ def load_all_fit_iems(
         )
 
         # Add data to big arrays
-        mean_ctf_slopes[task_num].append(mean_ctf_slope)
-        mean_ctf_slopes_null[task_num].append(mean_ctf_slope_null)
+        mean_model_fits[task_num].append(mean_model_fit)
+        mean_model_fits_null[task_num].append(mean_model_fit_null)
         t_arrays[task_num] = t_arr
 
-    # Collate CTF slopes across subjects
-    mean_ctf_slopes = [np.array(ctf_slope) for ctf_slope in mean_ctf_slopes]
-    mean_ctf_slopes_null = [
-        np.array(ctf_slope_null) for ctf_slope_null in mean_ctf_slopes_null
+    # Collate outputs from model fitting across subjects
+    mean_model_fits = [np.array(model_fit) for model_fit in mean_model_fits]
+    mean_model_fits_null = [
+        np.array(model_fit_null) for model_fit_null in mean_model_fits_null
     ]
 
     return (
-        mean_ctf_slopes,
-        mean_ctf_slopes_null,
+        mean_model_fits,
+        mean_model_fits_null,
         t_arrays,
     )
 
 
-def fit_iem_desired_params(
+def fit_model_desired_params(
     sp_params="all",
     sparam_dir=params.SPARAM_DIR,
     total_power_dir=params.TOTAL_POWER_DIR,
     trial_split_criterion=None,
-    verbose=True,
+    method="iem",
     output_dir=params.IEM_OUTPUT_DIR,
     single_trials=False,
+    verbose=True,
 ):
-    """Fit inverted encoding model (IEM) for total power and all parameters from
-    spectral parameterization."""
+    """Fit desired model for total power and all parameters from spectral
+    parameterization."""
     # Determine all parameters to fit IEM for
     if sp_params == "all":
         sp_params = {
@@ -770,6 +833,7 @@ def fit_iem_desired_params(
             sp_param,
             param_dir,
             trial_split_criterion=trial_split_criterion,
+            method=method,
             output_dir=output_dir,
             single_trials=single_trials,
         )
@@ -777,8 +841,8 @@ def fit_iem_desired_params(
             print(f"Fit IEMs for {sp_param} in {time.time() - start:.2f} s")
 
     # Load fit IEMs for all parameters from spectral parameterization
-    ctf_slopes_all_params = {}
-    ctf_slopes_null_all_params = {}
+    model_fits_all_params = {}
+    model_fits_null_all_params = {}
     t_all_params = {}
     for sp_param in sp_params:
         # Determine directory containing parameterized data
@@ -788,10 +852,10 @@ def fit_iem_desired_params(
 
         # Load fit IEMs for one parameter
         (
-            ctf_slopes_one_param,
-            ctf_slopes_null_one_param,
+            model_fits_one_param,
+            model_fits_null_one_param,
             t,
-        ) = load_all_fit_iems(
+        ) = load_all_model_fits(
             sp_param,
             param_dir,
             trial_split_criterion=trial_split_criterion,
@@ -799,7 +863,7 @@ def fit_iem_desired_params(
         )
 
         # Put into dictionaries
-        ctf_slopes_all_params[sp_param] = ctf_slopes_one_param
-        ctf_slopes_null_all_params[sp_param] = ctf_slopes_null_one_param
+        model_fits_all_params[sp_param] = model_fits_one_param
+        model_fits_null_all_params[sp_param] = model_fits_null_one_param
         t_all_params[sp_param] = t
-    return ctf_slopes_all_params, ctf_slopes_null_all_params, t_all_params
+    return model_fits_all_params, model_fits_null_all_params, t_all_params

@@ -2,15 +2,14 @@
  power and aperiodic exponent extracted from single-trial EEG data."""
 
 # Import necessary modules
-import matplotlib.pyplot as plt
-from train_and_test_iem import fit_iem_desired_params
-from plot_iem_results import plot_ctf_slope_time_courses
+from train_and_test_model import fit_model_desired_params
+from plot_model_fits import plot_model_fit_time_courses
 import params
 
 if __name__ == "__main__":
     # Plot CTF slope time courses for desired parameters from spectral
     # parameterization model
-    ctf_slopes, ctf_slopes_null, t_arrays = fit_iem_desired_params(
+    ctf_slopes, ctf_slopes_null, t_arrays = fit_model_desired_params(
         sp_params=["total_power", "linOscAUC", "exponent"],
         verbose=False,
         single_trials=True,
@@ -21,7 +20,7 @@ if __name__ == "__main__":
         "linOscAUC": "Alpha oscillatory power",
         "exponent": "Aperiodic exponent",
     }
-    plot_ctf_slope_time_courses(
+    plot_model_fit_time_courses(
         ctf_slopes,
         t_arrays,
         ctf_slopes_contrast=ctf_slopes_null,

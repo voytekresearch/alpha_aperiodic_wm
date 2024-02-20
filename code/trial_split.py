@@ -3,8 +3,8 @@ splits."""
 
 # Import necessary modules
 import numpy as np
-from train_and_test_iem import fit_iem_desired_params
-from plot_iem_results import plot_ctf_slope_time_courses
+from train_and_test_model import fit_model_desired_params
+from plot_model_fits import plot_model_fit_time_courses
 import params
 
 
@@ -19,7 +19,7 @@ def split_trials_on_param(
         _,
         t,
         # Fit IEMs with trial split on exponent change
-    ) = fit_iem_desired_params(
+    ) = fit_model_desired_params(
         sp_params=iem_params,
         output_dir=trial_split_dir,
         trial_split_criterion=split_dct,
@@ -34,7 +34,7 @@ def split_trials_on_param(
         k: [np.array([s["low"] for s in task]) for task in v]
         for k, v in ctf_slopes.items()
     }
-    plot_ctf_slope_time_courses(
+    plot_model_fit_time_courses(
         split_high,
         t,
         ctf_slopes_contrast=split_low,
