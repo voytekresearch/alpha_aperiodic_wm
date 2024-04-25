@@ -12,7 +12,7 @@ import params
 from iem import IEM
 from sklearn.linear_model import Ridge
 from sklearn.multioutput import MultiOutputRegressor
-from astropy.stats import circorrcoef
+from astropy.stats import circcorrcoef
 
 
 def split_trials(
@@ -301,14 +301,14 @@ def circ_ridge_regression(x_train, y_train, x_test, y_test):
     y_train_multi = np.array([np.sin(y_train), np.cos(y_train)]).T
 
     # Fit the model
-    multi_output.fit(x_train, y_train_multi)
+    multi_output.fit(x_train.T, y_train_multi)
 
     # Transform the prediction back to angle
-    prediction = multi_output.predict(x_test)
+    prediction = multi_output.predict(x_test.T)
     y_predicted = np.arctan2(prediction[:, 0], prediction[:, 1])
 
     # Compute the circular correlation coefficient
-    circ_corr = circorrcoef(y_test, y_predicted)
+    circ_corr = circcorrcoef(y_test, y_predicted)
     return circ_corr
 
 

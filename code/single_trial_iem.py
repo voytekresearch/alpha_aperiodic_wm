@@ -23,7 +23,7 @@ if __name__ == "__main__":
     plot_model_fit_time_courses(
         ctf_slopes,
         t_arrays,
-        ctf_slopes_contrast=ctf_slopes_null,
+        model_fits_contrast=ctf_slopes_null,
         title="All parameters",
         palettes=["Set1"],
         param_names=param_names,

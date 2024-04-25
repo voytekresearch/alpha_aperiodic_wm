@@ -15,7 +15,8 @@ if __name__ == "__main__":
     # Plot CTF slope time courses for desired parameters from spectral
     # parameterization model
     ctf_slopes, ctf_slopes_null, t_arrays = fit_model_desired_params(
-        sp_params=["total_power", "linOscAUC", "exponent"], verbose=False
+        sp_params=["total_power", "linOscAUC", "exponent"],
+        verbose=False,
     )
     param_names = {
         "total_power": "Alpha total power",
@@ -25,7 +26,7 @@ if __name__ == "__main__":
     plot_model_fit_time_courses(
         ctf_slopes,
         t_arrays,
-        ctf_slopes_contrast=ctf_slopes_null,
+        model_fits_contrast=ctf_slopes_null,
         title="All parameters",
         palettes=["Set1"],
         param_names=param_names,
@@ -39,7 +40,7 @@ if __name__ == "__main__":
         ctf_slopes["exponent"],
         t_arrays["exponent"],
         (0.0, 0.4),
-        ctf_slopes_shuffled=ctf_slopes_null["exponent"],
+        model_fits_shuffled=ctf_slopes_null["exponent"],
         palette=(cmap(3), cmap(2)),
         save_fname="exp_ctf_slope_paired_t-test.png",
     )
@@ -50,7 +51,7 @@ if __name__ == "__main__":
         ctf_slopes["linOscAUC"],
         t_arrays["linOscAUC"],
         "delay",
-        ctf_slopes_shuffled=ctf_slopes_null["linOscAUC"],
+        model_fits_shuffled=ctf_slopes_null["linOscAUC"],
         palette=(cmap(1), cmap(0)),
         save_fname="pw_ctf_slope_paired_t-test.png",
     )
