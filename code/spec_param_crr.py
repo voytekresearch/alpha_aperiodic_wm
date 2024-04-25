@@ -30,6 +30,7 @@ if __name__ == "__main__":
         model_fits_contrast=circ_corrcoefs_null,
         fig_dir=params.CRR_OUTPUT_DIR,
         model_output_name="Circular correlation coefficient",
+        name="crr",
         title="All parameters",
         palettes=["Set1"],
         param_names=param_names,

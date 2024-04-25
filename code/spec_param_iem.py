@@ -31,6 +31,7 @@ if __name__ == "__main__":
         palettes=["Set1"],
         param_names=param_names,
         plt_errorbars=True,
+        name="iem",
     )
 
     # Plot paired t-tests of CTF slopes for the aperiodic exponent in first
