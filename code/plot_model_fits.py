@@ -87,7 +87,6 @@ def plot_model_fit(
     # Plot model fit time course for each parameter
     if ax is None:
         _, ax = plt.subplots(1, 1, figsize=(10, 6))
-    model_fits_big_df[model_output_name] = model_fits_big_df[model_output_name]
     ci = 95 if plot_errorbars else None
     ax = sns.lineplot(
         data=model_fits_big_df,
