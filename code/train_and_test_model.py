@@ -285,7 +285,7 @@ def fit_iem(train_data, train_labels, test_data, test_labels):
 
     # Compute mean CTF slope
     iem.compute_ctf_slope()
-    return iem.ctf_slope
+    return -iem.ctf_slope
 
 
 def circ_ridge_regression(x_train, y_train, x_test, y_test):

@@ -87,9 +87,7 @@ def plot_model_fit(
     # Plot model fit time course for each parameter
     if ax is None:
         _, ax = plt.subplots(1, 1, figsize=(10, 6))
-    model_fits_big_df[model_output_name] = -model_fits_big_df[
-        model_output_name
-    ]
+    model_fits_big_df[model_output_name] = model_fits_big_df[model_output_name]
     ci = 95 if plot_errorbars else None
     ax = sns.lineplot(
         data=model_fits_big_df,
@@ -370,9 +368,9 @@ def plot_model_fit_paired_ttest(
         t_window_idx = np.where(
             (t_arr >= t_window[0]) & (t_arr <= t_window[1])
         )[0]
-        model_fit = -np.mean(model_fit[:, t_window_idx], axis=1)
+        model_fit = np.mean(model_fit[:, t_window_idx], axis=1)
         if model_fits_shuffled is not None:
-            model_fit_shuffled = -np.mean(
+            model_fit_shuffled = np.mean(
                 model_fits_shuffled[i][:, t_window_idx], axis=1
             )
 
