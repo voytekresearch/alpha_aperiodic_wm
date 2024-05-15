@@ -110,7 +110,7 @@ def split_data_by_subject(
         # Announce start of conversion
         print(
             f"Converting to Epochs for {experiment}_{subject}"
-            f" {subject + 1}/{num_subjects}"
+            f" ({subject + 1}/{num_subjects})"
         )
 
         # Extract data from big nested dictionary
@@ -143,6 +143,10 @@ def split_data_by_subject(
             exp_data, experiment_vars["pos_bin"], subject
         )
         pos = _index_nested_object(exp_data, experiment_vars["pos"], subject)
+        if pos is None:
+            pos = _index_nested_object(
+                exp_data, experiment_vars["pos_backup"], subject
+            )
         pos_bin_nt = _index_nested_object(
             exp_data, experiment_vars["pos_bin_nt"], subject
         )
@@ -179,10 +183,10 @@ def split_data_by_subject(
             "rt": rt,
         }
         for key, val in metadata_dct.items():
-            metadata_dct[key] = np.full(len(pos), np.nan)
+            metadata_dct[key] = np.full(len(pos_bin), np.nan)
             if val is not None:
                 if len(val) > 1:
-                    metadata_dct[key] = val.flat
+                    metadata_dct[key] = val.flatten()
         metadata_df = pd.DataFrame(metadata_dct)
 
         # Turn data array into MNE EpochsArray with proper cropping applied
@@ -218,15 +222,10 @@ def split_data_by_subject(
         epochs.save(epochs_fname)
 
 
-def split_data_all_subjects(download_dir=params.DOWNLOAD_DIR):
+def split_data_all_subjects(
+    experiments=tuple(params.EXPERIMENT_VARS.keys()),
+):
     # Split data by subjects
-    experiments = set(
-        [
-            f.split(".")[-2].split("_")[-1]
-            for f in os.listdir(download_dir)
-            if ".mat" in f
-        ]
-    )
     for i, experiment in enumerate(sorted(experiments)):
         print(
             f"\nSplitting data for {experiment} ({i + 1}/{len(experiments)})"
