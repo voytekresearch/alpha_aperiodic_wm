@@ -142,6 +142,7 @@ def split_data_by_subject(
         pos_bin = _index_nested_object(
             exp_data, experiment_vars["pos_bin"], subject
         )
+        pos = _index_nested_object(exp_data, experiment_vars["pos"], subject)
         bad_electrodes = _index_nested_object(
             exp_data, experiment_vars["bad_electrodes"], subject
         )
@@ -164,6 +165,7 @@ def split_data_by_subject(
 
         # Create metadata DataFrame
         pos_bin_cleaned = pos_bin.flat
+        pos_cleaned = pos.flat
         error_cleaned = np.full(len(pos_bin_cleaned), np.nan)
         if error is not None:
             if len(error) > 1:
@@ -174,6 +176,7 @@ def split_data_by_subject(
                 rt_cleaned = rt.flat
         metadata_df = pd.DataFrame(
             {
+                "pos": pos_cleaned,
                 "pos_bin": pos_bin_cleaned,
                 "error": error_cleaned,
                 "rt": rt_cleaned,
