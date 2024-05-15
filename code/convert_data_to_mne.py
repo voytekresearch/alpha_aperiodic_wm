@@ -143,6 +143,12 @@ def split_data_by_subject(
             exp_data, experiment_vars["pos_bin"], subject
         )
         pos = _index_nested_object(exp_data, experiment_vars["pos"], subject)
+        pos_bin_nt = _index_nested_object(
+            exp_data, experiment_vars["pos_bin_nt"], subject
+        )
+        pos_nt = _index_nested_object(
+            exp_data, experiment_vars["pos_nt"], subject
+        )
         bad_electrodes = _index_nested_object(
             exp_data, experiment_vars["bad_electrodes"], subject
         )
@@ -164,24 +170,20 @@ def split_data_by_subject(
         info["bads"] = [e for e in list(bad_electrodes) if e in ch_labels]
 
         # Create metadata DataFrame
-        pos_bin_cleaned = pos_bin.flat
-        pos_cleaned = pos.flat
-        error_cleaned = np.full(len(pos_bin_cleaned), np.nan)
-        if error is not None:
-            if len(error) > 1:
-                error_cleaned = error.flat
-        rt_cleaned = np.full(len(pos_bin_cleaned), np.nan)
-        if rt is not None:
-            if len(rt) > 1:
-                rt_cleaned = rt.flat
-        metadata_df = pd.DataFrame(
-            {
-                "pos": pos_cleaned,
-                "pos_bin": pos_bin_cleaned,
-                "error": error_cleaned,
-                "rt": rt_cleaned,
-            }
-        )
+        metadata_dct = {
+            "pos": pos,
+            "pos_bin": pos_bin,
+            "pos_bin_nt": pos_bin_nt,
+            "pos_nt": pos_nt,
+            "error": error,
+            "rt": rt,
+        }
+        for key, val in metadata_dct.items():
+            metadata_dct[key] = np.full(len(pos), np.nan)
+            if val is not None:
+                if len(val) > 1:
+                    metadata_dct[key] = val.flat
+        metadata_df = pd.DataFrame(metadata_dct)
 
         # Turn data array into MNE EpochsArray with proper cropping applied
         epochs = mne.EpochsArray(
