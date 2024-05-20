@@ -189,6 +189,12 @@ def split_data_by_subject(
                     metadata_dct[key] = val.flatten()
         metadata_df = pd.DataFrame(metadata_dct)
 
+        # Make sure position is in 0-360 range
+        assert (
+            0 <= metadata_df["pos"].values.any() < 360
+        ), f"Position not in 0-360 range: "
+        f"{metadata_df.query('pos < 0 or pos >= 360')}"
+
         # Turn data array into MNE EpochsArray with proper cropping applied
         epochs = mne.EpochsArray(
             eeg_data,
