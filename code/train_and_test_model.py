@@ -4,9 +4,7 @@
 # Import necessary modules
 import os.path
 import time
-import multiprocessing as mp
 import numpy as np
-import pandas as pd
 import mne
 import params
 from iem import IEM
@@ -15,103 +13,12 @@ from sklearn.multioutput import MultiOutputRegressor
 from astropy.stats import circcorrcoef
 
 
-def split_trials(
-    subj,
-    param,
-    t_window,
-    baseline_t_window=None,
-    operation="-",
-    channels=None,
-    bottom_frac=0.5,
-    top_frac=0.5,
-    metadata=False,
-    param_dir=params.SPARAM_DIR,
-    task_timings=params.TASK_TIMINGS,
-    subjects_by_task=params.SUBJECTS_BY_TASK,
-):
-    "Split trials based on given criterion."
-    # Load parameterized data
-    epochs, times, _, param_data = load_param_data(
-        subj, param, param_dir, metadata=metadata
-    )
-
-    # Parse subject ID
-    experiment, subj_num = subj.split("_")
-    task_num = np.argmax(
-        [
-            exp == experiment and int(subj_num) in ids
-            for exp, ids in subjects_by_task
-        ]
-    )
-
-    # Chunk by time window if desired
-    processed_data = param_data
-    if t_window is not None:
-        windowed_data = []
-        for one_t_window in (baseline_t_window, t_window):
-            # Skip if no time window
-            if one_t_window is None:
-                continue
-
-            # Parse time window
-            if one_t_window == "baseline":
-                one_t_window = (times[0], 0.0)
-            elif one_t_window == "stimulus":
-                one_t_window = (0.0, task_timings[task_num][1])
-            elif one_t_window == "delay":
-                one_t_window = task_timings[task_num]
-            elif one_t_window == "response":
-                one_t_window = (task_timings[task_num][1], times[-1])
-
-            # Average across time window
-            t_window_idx = np.where(
-                (times >= one_t_window[0]) & (times <= one_t_window[1])
-            )[0]
-            windowed_data.append(
-                np.mean(param_data[:, :, t_window_idx], axis=-1)
-            )
-
-        # Perform operation between time windows
-        processed_data = windowed_data[0]
-        if len(windowed_data) == 2:
-            if operation == "-":
-                processed_data = windowed_data[1] - windowed_data[0]
-            elif operation == "/":
-                processed_data = windowed_data[1] / windowed_data[0]
-
-    # Subset channels if desired
-    if channels is not None:
-        ch_mask = np.isin(epochs.ch_names, channels)
-        processed_data = processed_data[:, ch_mask]
-
-    # Average across channels if 2D and across channels and time if 3D
-    if processed_data.ndim > 1:
-        axis = tuple(-np.arange(processed_data.ndim)[1:])
-        processed_data = np.mean(processed_data, axis=axis)
-
-    # Remove None values
-    processed_data = np.array(list(filter(None, processed_data)))
-
-    # Sort trials by parameterized data
-    sorted_idx = np.argsort(processed_data)
-    np.save(f"error.npy", processed_data)
-
-    # Split trials into top and bottom percentiles
-    n_trials = len(sorted_idx)
-    n_bottom_trials = int(n_trials * bottom_frac)
-    n_top_trials = int(n_trials * top_frac)
-    trials_low = sorted_idx[:n_bottom_trials]
-    trials_high = sorted_idx[-n_top_trials:]
-    return trials_high, trials_low
-
-
 def load_param_data(
     subj,
     param,
     param_dir,
     metadata=False,
     epochs_dir=params.EPOCHS_DIR,
-    sparam_dir=params.SPARAM_DIR,
     decim_factor=params.DECIM_FACTOR,
 ):
     """Load processed EEG and positional data for one subject.
@@ -145,22 +52,6 @@ def load_param_data(
         verbose=False,
     )
 
-    # Extract position data
-    pos_data = epochs.metadata["pos_bin"].values
-    pos_nan = np.isnan(pos_data)
-
-    # Load any skipped trials
-    skipped_fname = f"{sparam_dir}/skipped.csv"
-    if os.path.exists(skipped_fname):
-        skipped_df = pd.read_csv(skipped_fname)
-        skipped_dct = skipped_df.to_dict(orient="list")
-        if subj in skipped_dct.keys():
-            pos_nan[skipped_dct[subj]] = True
-
-    # Remove trials with NaNs
-    pos_data = pos_data[~pos_nan]
-    epochs.drop(pos_nan, verbose=False)
-
     # Get times from epochs, taking account of decimation if applied
     times = epochs.times
     if param != "total_power":
@@ -169,18 +60,17 @@ def load_param_data(
     # If metadata, grab from epochs object
     if metadata:
         param_data = epochs.metadata[param].values
-        return epochs, times, pos_data, param_data
+        return epochs, times, param_data
 
     # Load parameterized data
     param_data = mne.read_epochs(
         os.path.join(param_dir, f"{subj}_{param}_epo.fif"), verbose=False
     ).get_data(copy=True)
-    param_data = param_data[~pos_nan, :, :]
-    return epochs, times, pos_data, param_data
+    return epochs, times, param_data
 
 
 def equalize_param_data_across_trial_blocks(
-    epochs, times, pos_data, param_data, average=True, n_blocks=params.N_BLOCKS
+    epochs, times, param_data, average=True, n_blocks=params.N_BLOCKS
 ):
     """Equalize parameterized data across trials blocks such that there are an
     equal number of trials for each location bin. Then, average across trials
@@ -206,18 +96,29 @@ def equalize_param_data_across_trial_blocks(
     param_arr : np.ndarray
         Array containing averaged parameterized data for decoding.
     """
-    # Extract relative variables from data
-    assert np.count_nonzero(np.isnan(pos_data)) == 0
-    n_bins = np.sum(~np.isnan(np.unique(pos_data)))
+    # Extract positional data from epochs
+    pos_bins = epochs.metadata["pos_bin"].values
+    pos_data = epochs.metadata["pos"].values
+
+    # Make sure positional data is valid
+    if pos_data[0] is None:
+        pos_data = None
+    if pos_data is not None:
+        assert np.count_nonzero(np.isnan(pos_data)) == 0
+        assert 0 <= pos_data.any() < 360
+
+    # Extract relative variables from position bins
+    assert np.count_nonzero(np.isnan(pos_bins)) == 0
+    n_bins = np.sum(~np.isnan(np.unique(pos_bins)))
     n_channels = epochs.get_data(copy=True).shape[-2]
     n_timepts = len(times)
 
     # Determine number of trials per location bin
-    _, counts = np.unique(pos_data, return_counts=True)
+    _, counts = np.unique(pos_bins, return_counts=True)
     n_trials_per_bin_per_block = counts.min() // n_blocks
     n_trials_per_bin = n_trials_per_bin_per_block * n_blocks
     idx_split_by_vals = np.split(
-        np.argsort(pos_data), np.where(np.diff(sorted(pos_data)))[0] + 1
+        np.argsort(pos_bins), np.where(np.diff(sorted(pos_bins)))[0] + 1
     )
 
     # Calculate parameterized data for block of trials
@@ -225,6 +126,9 @@ def equalize_param_data_across_trial_blocks(
     if not average:
         n_segments *= n_trials_per_bin_per_block
     param_arr = np.zeros((n_segments, n_blocks, n_channels, n_timepts))
+    pos_arr = None
+    if pos_data is not None:
+        pos_arr = np.zeros((n_blocks, n_segments))
 
     for i, val_split in enumerate(idx_split_by_vals):
         # Randomly permute indices
@@ -234,6 +138,8 @@ def equalize_param_data_across_trial_blocks(
         split_data = param_data[idx, :, :].reshape(
             -1, n_blocks, n_channels, n_timepts
         )
+        if pos_arr is not None:
+            split_pos = pos_data[idx].reshape(n_blocks, -1)
 
         # Average across trials for each location bin if desired
         if average:
@@ -248,10 +154,16 @@ def equalize_param_data_across_trial_blocks(
         if average:
             start_idx, end_idx = i, i + 1
         param_arr[start_idx:end_idx, :, :, :] = blocked_data
+        if pos_arr is not None:
+            pos_arr[:, start_idx:end_idx] = split_pos
 
     # Rearrange axes of data to work for IEM pipeline
     param_arr = np.swapaxes(param_arr, 0, 2)
-    return param_arr
+
+    # Recast positional data as integers
+    if pos_arr is not None:
+        pos_arr = pos_arr.astype(int)
+    return param_arr, pos_arr
 
 
 def fit_iem(train_data, train_labels, test_data, test_labels):
@@ -375,6 +287,7 @@ def train_and_test_one_block(
 
 def train_and_test_one_block_set(
     param_arr,
+    pos_data,
     n_timepts,
     n_blocks=params.N_BLOCKS,
     method="iem",
@@ -392,12 +305,14 @@ def train_and_test_one_block_set(
 
         # Create labels for training and testing
         base_labels = IEM().channel_centers
-        if single_trials:
-            # Infer number of trials per location bin per block
-            n_trials_per_bin = test_data.shape[1] // len(base_labels)
-            base_labels = np.repeat(base_labels, n_trials_per_bin)
         train_labels = np.tile(base_labels, n_blocks - 1)
         test_labels = base_labels
+        if single_trials:
+            # Infer number of trials per location bin per block
+            train_labels = np.delete(
+                pos_data, test_block_num, axis=0
+            ).flatten()
+            test_labels = pos_data[test_block_num].flatten()
 
         # Train IEMs for block of data, with no shuffle
         model_fit[test_block_num, :] = train_and_test_one_block(
@@ -420,7 +335,6 @@ def train_and_test_one_subj(
     subj,
     param,
     param_dir,
-    trial_split_criterion=None,
     n_block_iters=params.N_BLOCK_ITERS,
     output_dir=params.IEM_OUTPUT_DIR,
     method="iem",
@@ -457,108 +371,79 @@ def train_and_test_one_subj(
     start = time.time()
 
     # Load parameterized data
-    epochs, times, pos_data, param_data = load_param_data(
+    epochs, times, param_data = load_param_data(
         subj,
         param,
         param_dir,
     )
 
-    # Split trials based on selection criteria
-    pos_data_set = (pos_data,)
-    param_data_set = (param_data,)
-    tags = ("",)
-    if trial_split_criterion is not None:
-        tags = ("high", "low")
-        trials_high, trials_low = split_trials(subj, **trial_split_criterion)
-        split_param = trial_split_criterion["param"]
+    # Make directories specific to parameter and trial split
+    # (if there is one)
+    save_dir = os.path.join(output_dir, param)
+    os.makedirs(save_dir, exist_ok=True)
 
-        # Skip processing if not enough trials in one category
-        if len(trials_high) < 50 or len(trials_low) < 50:
-            n_trials_str = f"(n = {len(trials_high) + len(trials_low)} trials)"
-            print(
-                f"Not enough {split_param} data for trial split with {subj} "
-                + n_trials_str
-            )
-            return
+    # Determine file names
+    model_fit_fname = f"{save_dir}/model_fit_{subj}.npy"
+    model_fit_null_fname = f"{save_dir}/model_fit_null_{subj}.npy"
 
-        # Split data based on trial split
-        pos_data_set = (
-            pos_data[trials_high],
-            pos_data[trials_low],
+    # Skip processing if already done
+    if os.path.exists(model_fit_fname) and os.path.exists(
+        model_fit_null_fname
+    ):
+        return
+
+    # Iterate through sets of blocks
+    n_timepts = len(times)
+
+    # Average parameterized data within trial blocks
+    param_arrs, pos_arrs = list(
+        zip(
+            *[
+                equalize_param_data_across_trial_blocks(
+                    epochs,
+                    times,
+                    param_data,
+                    average=not single_trials,
+                )
+                for _ in range(n_block_iters)
+            ]
         )
-        param_data_set = (
-            param_data[trials_high],
-            param_data[trials_low],
-        )
+    )
 
-        # Make directories specific to parameter and trial split (if there is
-        # one)
-        output_dir = f"{output_dir}/{split_param}"
-        if "t_window" in trial_split_criterion:
-            split_t_window = trial_split_criterion["t_window"]
-            if split_t_window is not None:
-                output_dir = f"{output_dir}_{split_t_window}"
-        split_baseline = None
-        if "baseline_t_window" in trial_split_criterion:
-            split_baseline = trial_split_criterion["baseline_t_window"]
-        if split_baseline is not None:
-            operation = "diff"
-            if "operation" in trial_split_criterion:
-                operation = trial_split_criterion["operation"]
-            output_dir = f"{output_dir}_{operation}_{split_baseline}"
-
-    did_fitting = False
-    for tag, pos_data, param_data in zip(tags, pos_data_set, param_data_set):
-        # Make directories specific to parameter and trial split (if there is one)
-        save_dir = os.path.join(output_dir, param, tag)
-        os.makedirs(save_dir, exist_ok=True)
-
-        # Determine file names
-        model_fit_fname = f"{save_dir}/model_fit_{subj}.npy"
-        model_fit_null_fname = f"{save_dir}/model_fit_null_{subj}.npy"
-
-        # Skip processing if already done
-        if os.path.exists(model_fit_fname) and os.path.exists(
-            model_fit_null_fname
-        ):
+    # Train and test IEMs for each block iteration using multiprocessing
+    model_fit_lst, model_fit_null_lst = [], []
+    for param_arr, pos_data in zip(param_arrs, pos_arrs):
+        # Skip if no positional data and single trials decoding is desired
+        if pos_data is None and single_trials:
             continue
+        one_block_set = train_and_test_one_block_set(
+            param_arr,
+            pos_data,
+            n_timepts,
+            method=method,
+            single_trials=single_trials,
+        )
+        model_fit_lst.append(one_block_set[0])
+        model_fit_null_lst.append(one_block_set[1])
 
-        # Iterate through sets of blocks
-        did_fitting = True
-        n_timepts = len(times)
+    # Return if no fitting was done
+    if not model_fit_lst:
+        return
 
-        # Average parameterized data within trial blocks
-        param_arrs = [
-            equalize_param_data_across_trial_blocks(
-                epochs, times, pos_data, param_data, average=not single_trials
-            )
-            for _ in range(n_block_iters)
-        ]
+    # Stack model fits across block iterations
+    model_fit = np.stack(model_fit_lst)
+    model_fit_null = np.stack(model_fit_null_lst)
 
-        # Train and test IEMs for each block iteration using multiprocessing
-        model_fit_lst, model_fit_null_lst = [], []
-        for param_arr in param_arrs:
-            one_block_set = train_and_test_one_block_set(
-                param_arr,
-                n_timepts,
-                method=method,
-                single_trials=single_trials,
-            )
-            model_fit_lst.append(one_block_set[0])
-            model_fit_null_lst.append(one_block_set[1])
-        model_fit = np.stack(model_fit_lst)
-        model_fit_null = np.stack(model_fit_null_lst)
+    # Average across blocks and block iterations
+    mean_model_fit = np.mean(model_fit, axis=(0, 1))
+    mean_model_fit_null = np.mean(model_fit_null, axis=(0, 1))
 
-        # Average across blocks and block iterations
-        mean_model_fit = np.mean(model_fit, axis=(0, 1))
-        mean_model_fit_null = np.mean(model_fit_null, axis=(0, 1))
-
-        # Save data to avoid unnecessary re-processing
-        np.save(model_fit_fname, mean_model_fit)
-        np.save(model_fit_null_fname, mean_model_fit_null)
+    # Save data to avoid unnecessary re-processing
+    np.save(model_fit_fname, mean_model_fit)
+    np.save(model_fit_null_fname, mean_model_fit_null)
 
     # Print processing time if desired
-    if verbose and did_fitting:
+    if verbose:
         print(
             f"Fit IEMs on {param} data for {subj} in "
             f"{time.time() - start:.3f} s"
@@ -592,7 +477,6 @@ def _get_subject_list(
 def train_and_test_all_subjs(
     param,
     param_dir,
-    trial_split_criterion=None,
     method="iem",
     output_dir=params.IEM_OUTPUT_DIR,
     single_trials=False,
@@ -626,7 +510,6 @@ def train_and_test_all_subjs(
             subj,
             param,
             param_dir,
-            trial_split_criterion=trial_split_criterion,
             method=method,
             output_dir=output_dir,
             single_trials=single_trials,
@@ -637,79 +520,30 @@ def load_model_fits_one_subj(
     subj,
     param,
     param_dir,
-    trial_split_criterion=None,
     output_dir=params.IEM_OUTPUT_DIR,
     verbose=True,
 ):
-    """Load model fit data for one subject.
-
-    Parameters
-    ----------
-    subj : str
-        Subject ID.
-    param : str
-        Parameter to use for decoding.
-    param_dir : str
-        Directory containing parameterized data.
-    trial_split_criterion : dict (default: None)
-        Dictionary containing trial split criterion.
-    output_dir : str (default: params.IEM_OUTPUT_DIR)
-        Directory to load output from.
-    verbose : bool (default: True)
-        Whether to print processing time.
-
-    Returns
-    -------
-    mean_model_fit : np.ndarray
-        Array containing output from model fitting across time.
-    mean_model_fit_null : np.ndarray
-        Array containing null output from model fitting across time.
-    """
+    """Load model fit data for one subject."""
     # Start timer
     start = time.time()
 
     # Load parameterized data
-    _, times, _, _ = load_param_data(subj, param, param_dir)
+    _, times, _ = load_param_data(subj, param, param_dir)
 
-    # Split trials based on selection criteria if desired
-    tags = ("",)
-    if trial_split_criterion is not None:
-        tags = ("high", "low")
-        split_param = trial_split_criterion["param"]
-        output_dir = f"{output_dir}/{split_param}"
-        if "t_window" in trial_split_criterion:
-            split_t_window = trial_split_criterion["t_window"]
-            if split_t_window is not None:
-                output_dir = f"{output_dir}_{split_t_window}"
-        split_baseline = None
-        if "baseline_t_window" in trial_split_criterion:
-            split_baseline = trial_split_criterion["baseline_t_window"]
-        if split_baseline is not None:
-            operation = "diff"
-            if "operation" in trial_split_criterion:
-                operation = trial_split_criterion["operation"]
-            output_dir = f"{output_dir}_{operation}_{split_baseline}"
+    # Determine file names
+    load_dir = os.path.join(output_dir, param)
+    model_fit_fname = f"{load_dir}/model_fit_{subj}.npy"
+    model_fit_null_fname = f"{load_dir}/model_fit_null_{subj}.npy"
 
-    mean_model_fit_dct, mean_model_fit_null_dct = {}, {}
-    for tag in tags:
-        # Determine file names
-        load_dir = os.path.join(output_dir, param, tag)
-        model_fit_fname = f"{load_dir}/model_fit_{subj}.npy"
-        model_fit_null_fname = f"{load_dir}/model_fit_null_{subj}.npy"
+    # Return if file does not exist
+    if not os.path.exists(model_fit_fname):
+        return None, None, None
 
-        # Return if file does not exist
-        if not os.path.exists(model_fit_fname):
-            return None, None, None
+    # Load slope array
+    mean_model_fit = np.load(model_fit_fname)
 
-        # Load slope array
-        mean_model_fit = np.load(model_fit_fname)
-
-        # Load null slope array
-        mean_model_fit_null = np.load(model_fit_null_fname)
-
-        # Put into dictionaries
-        mean_model_fit_dct[tag] = mean_model_fit
-        mean_model_fit_null_dct[tag] = mean_model_fit_null
+    # Load null slope array
+    mean_model_fit_null = np.load(model_fit_null_fname)
 
     # Print processing time if desired
     if verbose:
@@ -717,37 +551,16 @@ def load_model_fits_one_subj(
             f"Loading {param} data for {subj} took "
             f"{time.time() - start:.3f} s"
         )
-
-    if len(tags) > 1:
-        return mean_model_fit_dct, mean_model_fit_null_dct, times
     return mean_model_fit, mean_model_fit_null, times
 
 
 def load_all_model_fits(
     param,
     param_dir,
-    trial_split_criterion=None,
     subjects_by_task=params.SUBJECTS_BY_TASK,
     output_dir=params.IEM_OUTPUT_DIR,
 ):
-    """Load model fits for all subjects.
-
-    Parameters
-    ----------
-    param : str
-        Parameter to use for decoding.
-    param_dir : str
-        Directory containing parameterized data.
-    fig_dir : str (default: params.FIG_DIR)
-        Directory to save figures to.
-
-    Returns
-    -------
-    mean_model_fits : np.ndarray
-        Array containing outputs from model fitting across subjects.
-    t_arr : np.ndarray
-        Array containing time points.
-    """
+    """Load model fits for all subjects."""
     # Get all subject IDs for IEMs, excluding those that were not
     # processed or excluded
     subjs = _get_subject_list(param, param_dir)
@@ -762,7 +575,6 @@ def load_all_model_fits(
             subj,
             param,
             param_dir,
-            trial_split_criterion=trial_split_criterion,
             output_dir=output_dir,
         )
 
@@ -801,7 +613,6 @@ def fit_model_desired_params(
     sp_params="all",
     sparam_dir=params.SPARAM_DIR,
     total_power_dir=params.TOTAL_POWER_DIR,
-    trial_split_criterion=None,
     method="iem",
     output_dir=params.IEM_OUTPUT_DIR,
     single_trials=False,
@@ -832,7 +643,6 @@ def fit_model_desired_params(
         train_and_test_all_subjs(
             sp_param,
             param_dir,
-            trial_split_criterion=trial_split_criterion,
             method=method,
             output_dir=output_dir,
             single_trials=single_trials,
@@ -858,7 +668,6 @@ def fit_model_desired_params(
         ) = load_all_model_fits(
             sp_param,
             param_dir,
-            trial_split_criterion=trial_split_criterion,
             output_dir=output_dir,
         )
 

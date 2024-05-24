@@ -12,7 +12,6 @@ SPARAM_DIR = f"{DATA_DIR}/sparam"
 ERP_DIR = f"{DATA_DIR}/erp"
 IEM_OUTPUT_DIR = f"{DATA_DIR}/iem_output"
 CRR_OUTPUT_DIR = f"{DATA_DIR}/crr_output"
-TRIAL_SPLIT_DIR = f"{DATA_DIR}/trial_split"
 SINGLE_TRIAL_DIR = f"{DATA_DIR}/single_trial"
 FIG_DIR = "figs"
 
