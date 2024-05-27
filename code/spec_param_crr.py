@@ -18,6 +18,7 @@ if __name__ == "__main__":
         sp_params=["total_power", "linOscAUC", "exponent"],
         method="crr",
         verbose=False,
+        output_dir=params.CRR_OUTPUT_DIR,
     )
     param_names = {
         "total_power": "Alpha total power",
@@ -28,7 +29,6 @@ if __name__ == "__main__":
         circ_corrcoefs,
         t_arrays,
         model_fits_contrast=circ_corrcoefs_null,
-        fig_dir=params.CRR_OUTPUT_DIR,
         model_output_name="Circular correlation coefficient",
         name="crr",
         title="All parameters",

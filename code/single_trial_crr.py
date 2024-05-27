@@ -1,19 +1,21 @@
-"""Fit inverted encoding model (IEM) for spatial location from alpha oscillatory 
- power and aperiodic exponent extracted from single-trial EEG data."""
+"""Fit circular ridge regression for spatial location from alpha oscillatory 
+ power and aperiodic exponent extracted from EEG data."""
 
 # Import necessary modules
+import matplotlib.pyplot as plt
 from train_and_test_model import fit_model_desired_params
 from plot_model_fits import plot_model_fit_time_courses
 import params
 
 if __name__ == "__main__":
-    # Plot CTF slope time courses for desired parameters from spectral
-    # parameterization model
-    ctf_slopes, ctf_slopes_null, t_arrays = fit_model_desired_params(
+    # Plot circular correlation coefficient time courses for desired parameters
+    # from spectral parameterization model
+    circ_corrcoefs, circ_corrcoefs_null, t_arrays = fit_model_desired_params(
         sp_params=["total_power", "linOscAUC", "exponent"],
+        method="crr",
         verbose=False,
         single_trials=True,
-        output_dir=params.SINGLE_TRIAL_IEM_DIR,
+        output_dir=params.SINGLE_TRIAL_CRR_DIR,
     )
     param_names = {
         "total_power": "Alpha total power",
@@ -21,12 +23,13 @@ if __name__ == "__main__":
         "exponent": "Aperiodic exponent",
     }
     plot_model_fit_time_courses(
-        ctf_slopes,
+        circ_corrcoefs,
         t_arrays,
-        model_fits_contrast=ctf_slopes_null,
+        model_fits_contrast=circ_corrcoefs_null,
+        model_output_name="Circular correlation coefficient",
+        name="single_trial_crr",
         title="All parameters",
         palettes=["Set1"],
         param_names=param_names,
         plt_errorbars=True,
-        name="single_trial_iem",
     )

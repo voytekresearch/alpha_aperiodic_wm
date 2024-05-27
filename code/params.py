@@ -12,7 +12,8 @@ SPARAM_DIR = f"{DATA_DIR}/sparam"
 ERP_DIR = f"{DATA_DIR}/erp"
 IEM_OUTPUT_DIR = f"{DATA_DIR}/iem_output"
 CRR_OUTPUT_DIR = f"{DATA_DIR}/crr_output"
-SINGLE_TRIAL_DIR = f"{DATA_DIR}/single_trial"
+SINGLE_TRIAL_IEM_DIR = f"{DATA_DIR}/single_trial_iem"
+SINGLE_TRIAL_CRR_DIR = f"{DATA_DIR}/single_trial_crr"
 FIG_DIR = "figs"
 
 # Experiment variable
