@@ -2,11 +2,15 @@
  power and aperiodic exponent extracted from single-trial EEG data."""
 
 # Import necessary modules
+import numpy as np
 from train_and_test_model import fit_model_desired_params
 from plot_model_fits import plot_model_fit_time_courses
 import params
 
 if __name__ == "__main__":
+    # Set seed
+    np.random.seed(params.SEED)
+
     # Plot CTF slope time courses for desired parameters from spectral
     # parameterization model
     ctf_slopes, ctf_slopes_null, t_arrays = fit_model_desired_params(

@@ -139,7 +139,8 @@ DECIM_FACTOR = 1  # decimation/downsampling factor
 N_PEAKS = 4
 PEAK_WIDTH_LIMS = (2, 8)
 
-# IEM parameters
+# IEM/CRR parameters
+SEED = 7
 IEM_N_CHANNELS = 8
 IEM_FEAT_SPACE_EDGES = (0, 359)
 IEM_BASIS_FUNC = lambda theta: np.sin(0.5 * np.radians(theta)) ** 7

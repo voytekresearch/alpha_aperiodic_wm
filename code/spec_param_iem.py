@@ -3,6 +3,7 @@
 (https://pubmed.ncbi.nlm.nih.gov/26467522/."""
 
 # Import necessary modules
+import numpy as np
 import matplotlib.pyplot as plt
 from train_and_test_model import fit_model_desired_params
 from plot_model_fits import (
@@ -10,8 +11,12 @@ from plot_model_fits import (
     compare_params_model_fit_time_courses,
     plot_model_fit_paired_ttest,
 )
+import params
 
 if __name__ == "__main__":
+    # Set seed
+    np.random.seed(params.SEED)
+
     # Plot CTF slope time courses for desired parameters from spectral
     # parameterization model
     ctf_slopes, ctf_slopes_null, t_arrays = fit_model_desired_params(

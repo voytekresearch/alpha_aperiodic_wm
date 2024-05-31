@@ -144,6 +144,7 @@ def equalize_param_data_across_trial_blocks(
         # Average across trials for each location bin if desired
         if average:
             split_data = np.nanmean(split_data, axis=0)
+            pos_arr = None
 
         # Take only real component of data
         blocked_data = np.real(split_data)

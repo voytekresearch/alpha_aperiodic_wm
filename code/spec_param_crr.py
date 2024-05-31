@@ -3,6 +3,7 @@
 
 # Import necessary modules
 import matplotlib.pyplot as plt
+import numpy as np
 from train_and_test_model import fit_model_desired_params
 from plot_model_fits import (
     plot_model_fit_time_courses,
@@ -12,6 +13,9 @@ from plot_model_fits import (
 import params
 
 if __name__ == "__main__":
+    # Set seed
+    np.random.seed(params.SEED)
+
     # Plot circular correlation coefficient time courses for desired parameters
     # from spectral parameterization model
     circ_corrcoefs, circ_corrcoefs_null, t_arrays = fit_model_desired_params(
