@@ -145,3 +145,10 @@ IEM_N_CHANNELS = 8
 IEM_FEAT_SPACE_EDGES = (0, 359)
 IEM_BASIS_FUNC = lambda theta: np.sin(0.5 * np.radians(theta)) ** 7
 FEATURE_NAME = "Spatial Location"
+
+# Electrode positions
+JNP_MONTAGE = "standard_1020"
+JNP_CUSTOM_CHANNELS = {
+    "OL": ["T5", "O1"],
+    "OR": ["T6", "O2"],
+}
