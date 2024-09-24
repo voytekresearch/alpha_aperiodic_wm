@@ -127,7 +127,7 @@ NICENESS = 19
 EXPERIMENT_NUM = 1
 SUBJ = 1
 N_BLOCKS = 3
-N_BLOCK_ITERS = 10
+N_BLOCK_ITERS = 100
 ALPHA_BAND = (8, 12)  # Hz
 
 # Spectral estimation parameters
