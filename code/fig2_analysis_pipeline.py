@@ -107,4 +107,5 @@ def plot_analysis_pipeline(
 
 if __name__ == "__main__":
     # Plot analysis pipeline
+    plt.style.use(params.PLOT_SETTINGS)
     plot_analysis_pipeline()

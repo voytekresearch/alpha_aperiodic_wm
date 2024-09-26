@@ -155,3 +155,16 @@ JNP_CUSTOM_CHANNELS = {
 
 # Plotting parameters
 CHANNELS_TO_PLOT = ["O1", "O2", "Fz", "Pz"]
+PLOT_SETTINGS = {
+    "ytick.labelsize": 16,
+    "xtick.labelsize": 16,
+    "font.size": 22,
+    "figure.figsize": (10, 5),
+    "axes.titlesize": 22,
+    "axes.labelsize": 18,
+    "lines.linewidth": 2,
+    "lines.markersize": 3,
+    "legend.fontsize": 11,
+    "mathtext.fontset": "stix",
+    "font.family": "STIXGeneral",
+}
