@@ -152,3 +152,6 @@ JNP_CUSTOM_CHANNELS = {
     "OL": ["T5", "O1"],
     "OR": ["T6", "O2"],
 }
+
+# Plotting parameters
+CHANNELS_TO_PLOT = ["O1", "O2", "Fz", "Pz"]

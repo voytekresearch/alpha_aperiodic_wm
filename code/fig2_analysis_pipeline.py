@@ -1,7 +1,8 @@
 # Import necessary modules
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from matplotlib import gridspec
 import mne
+import seaborn as sns
 import numpy as np
 import params
 
@@ -51,26 +52,46 @@ def plot_sensors(
     return
 
 
-def plot_epochs(epochs, ax=None):
+def plot_epochs(epochs, ax=None, chs_to_plot=params.CHANNELS_TO_PLOT):
     """Plot epoched data."""
+    # Get channel data
+    if chs_to_plot is None:
+        chs_to_plot = epochs.ch_names
+    ch_data = epochs.copy().get_data(picks=chs_to_plot)
+
+    # Get the spectral palette with different color for each channel
+    colors = sns.color_palette("mako", len(chs_to_plot))
+
+    # Plot epochs
+    for i, (ch, c) in enumerate(zip(chs_to_plot, colors)):
+        mean_norm = ch_data[0, i, :] - np.mean(ch_data[0, i, :])
+        ax.plot(epochs.times, mean_norm, color=c, label=ch)
+        ax.set_xlabel("Time (s)")
+        ax.set_ylabel("Amplitude (µV)")
+    sns.despine(ax=ax)
     return
 
 
-def plot_analysis_pipeline(epochs_dir=params.EPOCHS_DIR, subj_id="JNP_0"):
+def plot_analysis_pipeline(
+    epochs_dir=params.EPOCHS_DIR,
+    subj_id="JNP_0",
+):
     """Plot entire analysis pipeline in one big figure."""
     # Load subject's EEG data
     epochs_fname = f"{epochs_dir}/{subj_id}_eeg_epo.fif"
     epochs = mne.read_epochs(epochs_fname, verbose=False)
 
     # Make gridspec
-    fig = plt.figure(figsize=(20, 12))
+    fig = plt.figure(figsize=(40, 24))
     gs = fig.add_gridspec(4, 3, figure=fig)
 
     # Plot sensors
     ax_sensors = fig.add_subplot(gs[0, 0])
     plot_sensors(epochs, ax=ax_sensors)
 
-    # TO_DO: Plot epochs
+    # Plot epochs
+    ax_epochs = fig.add_subplot(gs[0, 1:])
+    plot_epochs(epochs, ax_epochs)
 
     # TO-DO: Plot multitaper decomposition
 
@@ -80,9 +101,10 @@ def plot_analysis_pipeline(epochs_dir=params.EPOCHS_DIR, subj_id="JNP_0"):
 
     # Save figure
     fig_fname = f"{params.FIG_DIR}/fig2_analysis_pipeline.png"
-    fig.savefig(fig_fname, dpi=300)
+    fig.savefig(fig_fname, dpi=300, bbox_inches="tight")
     return
 
 
 if __name__ == "__main__":
+    # Plot analysis pipeline
     plot_analysis_pipeline()
