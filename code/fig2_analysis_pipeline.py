@@ -57,24 +57,76 @@ def plot_epochs(epochs, ax=None, chs_to_plot=params.CHANNELS_TO_PLOT):
     # Get channel data
     if chs_to_plot is None:
         chs_to_plot = epochs.ch_names
-    ch_data = epochs.copy().get_data(picks=chs_to_plot)
+    ch_data = epochs.copy().apply_baseline().get_data(picks=chs_to_plot)
 
     # Get the spectral palette with different color for each channel
     colors = sns.color_palette("mako", len(chs_to_plot))
 
     # Plot epochs
     for i, (ch, c) in enumerate(zip(chs_to_plot, colors)):
-        mean_norm = ch_data[0, i, :] - np.mean(ch_data[0, i, :])
-        ax.plot(epochs.times, mean_norm, color=c, label=ch)
+        ax.plot(epochs.times, ch_data[0, i, :], color=c, label=ch)
         ax.set_xlabel("Time (s)")
         ax.set_ylabel("Amplitude (µV)")
     sns.despine(ax=ax)
     return
 
 
+def plot_multitaper(
+    epochs,
+    ax=None,
+    ch=params.CHANNELS_TO_PLOT[0],
+    trial_num=0,
+    fmin=params.FMIN,
+    fmax=params.FMAX,
+    n_freqs=params.N_FREQS,
+    time_window_len=params.TIME_WINDOW_LEN,
+    decim_factor=params.DECIM_FACTOR,
+):
+    # Make frequencies linearly spaced
+    freqs = np.linspace(fmin, fmax, n_freqs)
+
+    # Make time window length consistent across frequencies
+    n_cycles = freqs * time_window_len
+
+    # Select data from just desired channel
+    ch_epochs = epochs.pick(ch)
+
+    # Get current trial of data
+    trial = ch_epochs.copy().drop(
+        [
+            i
+            for i in range(epochs.get_data(copy=True).shape[0])
+            if i != trial_num
+        ],
+        verbose=False,
+    )
+
+    # Use multiple tapers to estimate spectrogram
+    trial_tfr = mne.time_frequency.tfr_multitaper(
+        trial,
+        freqs,
+        n_cycles,
+        return_itc=False,
+        picks="eeg",
+        average=False,
+        decim=decim_factor,
+        verbose=False,
+    )
+
+    # Plot spectrogram
+    trial_tfr[0].average().plot(
+        axes=ax,
+        show=False,
+        dB=True,
+        cmap="magma",
+        vmin=np.min(trial_tfr),
+    )
+    return
+
+
 def plot_analysis_pipeline(
     epochs_dir=params.EPOCHS_DIR,
-    subj_id="JNP_0",
+    subj_id="CS_0",
 ):
     """Plot entire analysis pipeline in one big figure."""
     # Load subject's EEG data
@@ -83,17 +135,15 @@ def plot_analysis_pipeline(
 
     # Make gridspec
     fig = plt.figure(figsize=(40, 24))
-    gs = fig.add_gridspec(4, 3, figure=fig)
-
-    # Plot sensors
-    ax_sensors = fig.add_subplot(gs[0, 0])
-    plot_sensors(epochs, ax=ax_sensors)
+    gs = fig.add_gridspec(3, 4, figure=fig)
 
     # Plot epochs
-    ax_epochs = fig.add_subplot(gs[0, 1:])
-    plot_epochs(epochs, ax_epochs)
+    ax_epochs = fig.add_subplot(gs[0, :2])
+    plot_epochs(epochs, ax=ax_epochs)
 
-    # TO-DO: Plot multitaper decomposition
+    # Plot multitaper decomposition
+    ax_multitaper = fig.add_subplot(gs[0, 2:])
+    plot_multitaper(epochs, ax=ax_multitaper)
 
     # TO-DO: Plot spectral parameterization
 

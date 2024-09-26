@@ -148,10 +148,7 @@ FEATURE_NAME = "Spatial Location"
 
 # Electrode positions
 JNP_MONTAGE = "standard_1020"
-JNP_CUSTOM_CHANNELS = {
-    "OL": ["T5", "O1"],
-    "OR": ["T6", "O2"],
-}
+JNP_CUSTOM_CHANNELS = {}
 
 # Plotting parameters
 CHANNELS_TO_PLOT = ["O1", "O2", "Fz", "Pz"]
