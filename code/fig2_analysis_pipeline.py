@@ -1,6 +1,6 @@
 # Import necessary modules
 import matplotlib.pyplot as plt
-from matplotlib import gridspec
+from matplotlib.patches import Rectangle
 import mne
 import seaborn as sns
 import numpy as np
@@ -52,7 +52,13 @@ def plot_sensors(
     return
 
 
-def plot_epochs(epochs, ax=None, chs_to_plot=params.CHANNELS_TO_PLOT):
+def plot_epochs(
+    epochs,
+    ax=None,
+    tp=None,
+    chs_to_plot=params.CHANNELS_TO_PLOT,
+    time_window_len=params.TIME_WINDOW_LEN,
+):
     """Plot epoched data."""
     # Get channel data
     if chs_to_plot is None:
@@ -67,13 +73,29 @@ def plot_epochs(epochs, ax=None, chs_to_plot=params.CHANNELS_TO_PLOT):
         ax.plot(epochs.times, ch_data[0, i, :], color=c, label=ch)
         ax.set_xlabel("Time (s)")
         ax.set_ylabel("Amplitude (µV)")
+    ax.legend(title="Channel", loc="upper left")
     sns.despine(ax=ax)
+
+    # Mark time point of interest if provided
+    if tp is not None:
+        yrange = ax.get_ylim()[1] - ax.get_ylim()[0]
+        rect = Rectangle(
+            (tp - time_window_len / 2, ax.get_ylim()[0] + 0.025 * yrange),
+            time_window_len,
+            0.975 * yrange,
+            ec=(0, 0, 0, 0.5),
+            fc=(0, 0, 0, 0.1),
+            ls="--",
+            lw=3,
+        )
+        ax.add_patch(rect)
     return
 
 
 def plot_multitaper(
     epochs,
     ax=None,
+    tp=None,
     ch=params.CHANNELS_TO_PLOT[0],
     trial_num=0,
     fmin=params.FMIN,
@@ -121,12 +143,15 @@ def plot_multitaper(
         cmap="magma",
         vmin=np.min(trial_tfr),
     )
-    return
+    # Mark time point of interest if provided
+    if tp is not None:
+        ax.axvline(tp, color=(0, 0, 0, 0.5), linestyle="--")
 
 
 def plot_analysis_pipeline(
     epochs_dir=params.EPOCHS_DIR,
     subj_id="CS_0",
+    tp=0.5,
 ):
     """Plot entire analysis pipeline in one big figure."""
     # Load subject's EEG data
@@ -139,11 +164,11 @@ def plot_analysis_pipeline(
 
     # Plot epochs
     ax_epochs = fig.add_subplot(gs[0, :2])
-    plot_epochs(epochs, ax=ax_epochs)
+    plot_epochs(epochs, ax=ax_epochs, tp=tp)
 
     # Plot multitaper decomposition
     ax_multitaper = fig.add_subplot(gs[0, 2:])
-    plot_multitaper(epochs, ax=ax_multitaper)
+    plot_multitaper(epochs, ax=ax_multitaper, tp=tp)
 
     # TO-DO: Plot spectral parameterization
 
