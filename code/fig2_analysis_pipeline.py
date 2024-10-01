@@ -1,4 +1,6 @@
 # Import necessary modules
+import fooof
+from fooof.plts import plot_spectra
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 import mne
@@ -54,7 +56,7 @@ def plot_sensors(
 
 def plot_epochs(
     epochs,
-    ax=None,
+    ax,
     tp=None,
     chs_to_plot=params.CHANNELS_TO_PLOT,
     time_window_len=params.TIME_WINDOW_LEN,
@@ -94,7 +96,7 @@ def plot_epochs(
 
 def plot_multitaper(
     epochs,
-    ax=None,
+    ax,
     tp=None,
     ch=params.CHANNELS_TO_PLOT[0],
     trial_num=0,
@@ -146,6 +148,71 @@ def plot_multitaper(
     # Mark time point of interest if provided
     if tp is not None:
         ax.axvline(tp, color=(0, 0, 0, 0.5), linestyle="--")
+    return trial_tfr
+
+
+def plot_sparam_psd(
+    trial_tfr,
+    ax,
+    tp=0.5,
+    n_peaks=params.N_PEAKS,
+    peak_width_lims=params.PEAK_WIDTH_LIMS,
+    fmin=params.FMIN,
+    fmax=params.FMAX,
+    alpha_band=params.ALPHA_BAND,
+):
+    """Plot spectral parameterization."""
+    # Compute spectral parameterization
+    freqs = trial_tfr.freqs
+    tp_idx = np.argmin(np.abs(trial_tfr.times - tp))
+    powers = trial_tfr.data[0, 0, :, tp_idx]
+    fm = fooof.FOOOF(
+        max_n_peaks=n_peaks, peak_width_limits=peak_width_lims, verbose=False
+    )
+    fm.fit(freqs, powers, freq_range=(fmin, fmax))
+
+    # Determine indices for alpha band in frequencies array
+    low_freq_idx = np.argmin(np.abs(freqs - alpha_band[0]))
+    high_freq_idx = np.argmin(np.abs(freqs - alpha_band[1]))
+
+    # Plot spectral parameterization
+    plot_spectra(freqs, powers, ax=ax, c="k")
+    plot_spectra(
+        freqs,
+        10**fm._ap_fit,
+        freq_range=(fmin, fmax),
+        ax=ax,
+        c="blue",
+        ls="--",
+    )
+    ax.grid(False)
+    sns.despine(ax=ax)
+    ax.axvline(alpha_band[0], color="purple", linestyle="--", alpha=0.5)
+    ax.axvline(alpha_band[1], color="purple", linestyle="--", alpha=0.5)
+    ax.fill_between(
+        freqs[low_freq_idx : high_freq_idx + 1],
+        10 ** fm._ap_fit[low_freq_idx - 1 : high_freq_idx],
+        y2=powers[low_freq_idx : high_freq_idx + 1],
+        color="darkorange",
+        alpha=0.2,
+        label="Linear Oscillatory Alpha AUC",
+    )
+    ax.fill_between(
+        freqs[low_freq_idx : high_freq_idx + 1],
+        np.zeros(high_freq_idx - low_freq_idx + 1),
+        y2=powers[low_freq_idx : high_freq_idx + 1],
+        hatch="/",
+        facecolor="w",
+        edgecolor="darkorange",
+        alpha=0.2,
+        label="Linear Total Alpha AUC",
+    )
+    ax.legend(loc="upper right")
+    return
+
+
+def plot_sparam_params():
+    return
 
 
 def plot_analysis_pipeline(
@@ -159,7 +226,7 @@ def plot_analysis_pipeline(
     epochs = mne.read_epochs(epochs_fname, verbose=False)
 
     # Make gridspec
-    fig = plt.figure(figsize=(40, 24))
+    fig = plt.figure(figsize=(20, 12))
     gs = fig.add_gridspec(3, 4, figure=fig)
 
     # Plot epochs
@@ -168,9 +235,14 @@ def plot_analysis_pipeline(
 
     # Plot multitaper decomposition
     ax_multitaper = fig.add_subplot(gs[0, 2:])
-    plot_multitaper(epochs, ax=ax_multitaper, tp=tp)
+    trial_tfr = plot_multitaper(epochs, ax=ax_multitaper, tp=tp)
 
-    # TO-DO: Plot spectral parameterization
+    # Plot spectral parameterization PSD
+    ax_sparam = fig.add_subplot(gs[1, 0])
+    plot_sparam_psd(trial_tfr, ax=ax_sparam, tp=tp)
+
+    # Plot spectral parameters across time
+    ax_sparam_params = fig.add_subplot(gs[1, 1:-1])
 
     # TO-DO: Plot inverted encoding model
 
