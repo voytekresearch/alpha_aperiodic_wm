@@ -7,6 +7,7 @@ import mne
 import seaborn as sns
 import numpy as np
 import pandas as pd
+import string
 import params
 from train_and_test_model import load_param_data
 
@@ -324,6 +325,40 @@ def plot_sparam_topomaps(
     return
 
 
+def letter_label(label, ax, x=-0.1, y=1.05):
+    """Plot letter label on publication figures.
+
+    Parameters
+    ----------
+    label: string
+        Text to display as the bold label.
+    ax : instance of Axes
+        The axes to plot to.
+    x : float | None
+        x-position relative to axes left border.
+    y : float | None
+        y-position relative to axes top border.
+
+    """
+    # Plot the label
+    ax.text(
+        x,
+        y,
+        "%s" % label,
+        transform=ax.transAxes,
+        size=28,
+        weight="bold",
+    )
+
+
+def add_letter_labels(axes):
+    """Add letter labels to figure."""
+    for i, ax in enumerate(axes):
+        label = string.ascii_uppercase[i]
+        letter_label(label, ax)
+    return
+
+
 def plot_analysis_pipeline(
     epochs_dir=params.EPOCHS_DIR,
     subj_id="CS_0",
@@ -337,32 +372,38 @@ def plot_analysis_pipeline(
     epochs = mne.read_epochs(epochs_fname, verbose=False)
 
     # Make gridspec
-    fig = plt.figure(figsize=(20, 20))
-    gs = fig.add_gridspec(3, 4, figure=fig)
+    fig = plt.figure(figsize=(18, 12))
+    gs = fig.add_gridspec(2, 6, figure=fig)
 
     # Plot epochs
-    ax_epochs = fig.add_subplot(gs[0, :2])
+    ax_epochs = fig.add_subplot(gs[0, :3])
     plot_epochs(epochs, ax=ax_epochs, tp=tp)
 
     # Plot multitaper decomposition
-    ax_multitaper = fig.add_subplot(gs[0, 2:])
+    ax_multitaper = fig.add_subplot(gs[0, 3:])
     trial_tfr = plot_multitaper(
         epochs, ax=ax_multitaper, tp=tp, trial_num=trial_num
     )
 
     # Plot spectral parameterization PSD
-    ax_sparam = fig.add_subplot(gs[1, 0])
+    ax_sparam = fig.add_subplot(gs[1, :2])
     plot_sparam_psd(trial_tfr, ax=ax_sparam, tp=tp)
 
     # Plot spectral parameters across time
-    ax_sparam_params = fig.add_subplot(gs[1, 1:-1])
+    ax_sparam_params = fig.add_subplot(gs[1, 2:-1])
     plot_sparam_params(
         subj_id, ax=ax_sparam_params, trial_num=trial_num, tp=tp
     )
 
-    # TO-DO: Plot topomaps of spectral parameters for time point
+    # Plot topomaps of spectral parameters for time point
     gs_topomaps = gs[1, -1]
+    ax_topomaps = fig.add_subplot(gs_topomaps)
+    ax_topomaps.axis("off")
     plot_sparam_topomaps(subj_id, fig, gs_topomaps, trial_num=trial_num, tp=tp)
+
+    # Add letter labels
+    axes = [ax_epochs, ax_multitaper, ax_sparam, ax_sparam_params, ax_topomaps]
+    add_letter_labels(axes)
 
     # Save figure
     fig_fname = f"{fig_dir}/fig2_analysis_pipeline.png"
