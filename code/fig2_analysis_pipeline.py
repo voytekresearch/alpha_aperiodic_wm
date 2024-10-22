@@ -6,7 +6,9 @@ from matplotlib.patches import Rectangle
 import mne
 import seaborn as sns
 import numpy as np
+import pandas as pd
 import params
+from train_and_test_model import load_param_data
 
 
 def midpoint(pos1, pos2):
@@ -159,6 +161,7 @@ def plot_sparam_psd(
     peak_width_lims=params.PEAK_WIDTH_LIMS,
     fmin=params.FMIN,
     fmax=params.FMAX,
+    plot_freq_range=params.PLOT_FREQ_RANGE,
     alpha_band=params.ALPHA_BAND,
 ):
     """Plot spectral parameterization."""
@@ -175,20 +178,24 @@ def plot_sparam_psd(
     low_freq_idx = np.argmin(np.abs(freqs - alpha_band[0]))
     high_freq_idx = np.argmin(np.abs(freqs - alpha_band[1]))
 
-    # Plot spectral parameterization
+    # Plot PSD
     plot_spectra(freqs, powers, ax=ax, c="k")
+
+    # Plot exponent fit
     plot_spectra(
         freqs,
         10**fm._ap_fit,
-        freq_range=(fmin, fmax),
+        freq_range=plot_freq_range,
         ax=ax,
         c="blue",
         ls="--",
     )
-    ax.grid(False)
-    sns.despine(ax=ax)
+
+    # Plot alpha band
     ax.axvline(alpha_band[0], color="purple", linestyle="--", alpha=0.5)
     ax.axvline(alpha_band[1], color="purple", linestyle="--", alpha=0.5)
+
+    # Plot alpha AUC measures
     ax.fill_between(
         freqs[low_freq_idx : high_freq_idx + 1],
         10 ** fm._ap_fit[low_freq_idx - 1 : high_freq_idx],
@@ -207,18 +214,65 @@ def plot_sparam_psd(
         alpha=0.2,
         label="Linear Total Alpha AUC",
     )
+
+    # Plot aesthetics
+    ax.grid(False)
+    sns.despine(ax=ax)
     ax.legend(loc="upper right")
     return
 
 
-def plot_sparam_params():
+def plot_sparam_params(
+    subj_id,
+    ax,
+    tp=None,
+    trial_num=0,
+    ch=params.CHANNELS_TO_PLOT[0],
+    params_to_plot=params.PARAMS_TO_PLOT,
+):
+    """"""
+    # Load spectral parameterization data
+    for param in params_to_plot:
+        # Load parameter data
+        epochs, times, param_data = load_param_data(
+            subj_id, param["param"], param["dir"]
+        )
+
+        # Select data from just desired channel
+        ch_data = param_data
+        if ch is not None:
+            ch_idx = epochs.ch_names.index(ch)
+            ch_data = param_data[:, ch_idx, :]
+
+        # Select data from just desired trial
+        trial_data = ch_data
+        if trial_num is not None:
+            trial_data = ch_data[trial_num, :]
+
+        # Z-score data
+        trial_data = (trial_data - np.mean(trial_data)) / np.std(trial_data)
+
+        # Plot parameter data\
+        ax.plot(times, trial_data, label=param["name"], color=param["color"])
+
+    # Mark time point of interest if provided
+    if tp is not None:
+        ax.axvline(tp, color=(0, 0, 0, 0.5), linestyle="--")
+
+    # Plot aesthetics
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Z-score")
+    ax.legend(loc="upper right", title="Parameter")
+    sns.despine(ax=ax)
     return
 
 
 def plot_analysis_pipeline(
     epochs_dir=params.EPOCHS_DIR,
     subj_id="CS_0",
+    trial_num=0,
     tp=0.5,
+    fig_dir=params.FIG_DIR,
 ):
     """Plot entire analysis pipeline in one big figure."""
     # Load subject's EEG data
@@ -226,7 +280,7 @@ def plot_analysis_pipeline(
     epochs = mne.read_epochs(epochs_fname, verbose=False)
 
     # Make gridspec
-    fig = plt.figure(figsize=(20, 12))
+    fig = plt.figure(figsize=(20, 20))
     gs = fig.add_gridspec(3, 4, figure=fig)
 
     # Plot epochs
@@ -235,7 +289,9 @@ def plot_analysis_pipeline(
 
     # Plot multitaper decomposition
     ax_multitaper = fig.add_subplot(gs[0, 2:])
-    trial_tfr = plot_multitaper(epochs, ax=ax_multitaper, tp=tp)
+    trial_tfr = plot_multitaper(
+        epochs, ax=ax_multitaper, tp=tp, trial_num=trial_num
+    )
 
     # Plot spectral parameterization PSD
     ax_sparam = fig.add_subplot(gs[1, 0])
@@ -243,11 +299,14 @@ def plot_analysis_pipeline(
 
     # Plot spectral parameters across time
     ax_sparam_params = fig.add_subplot(gs[1, 1:-1])
+    plot_sparam_params(
+        subj_id, ax=ax_sparam_params, trial_num=trial_num, tp=tp
+    )
 
     # TO-DO: Plot inverted encoding model
 
     # Save figure
-    fig_fname = f"{params.FIG_DIR}/fig2_analysis_pipeline.png"
+    fig_fname = f"{fig_dir}/fig2_analysis_pipeline.png"
     fig.savefig(fig_fname, dpi=300, bbox_inches="tight")
     return
 

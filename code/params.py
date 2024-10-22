@@ -152,9 +152,30 @@ JNP_CUSTOM_CHANNELS = {}
 
 # Plotting parameters
 CHANNELS_TO_PLOT = ["O1", "O2", "Fz", "Pz"]
+PLOT_FREQ_RANGE = (1, 30)
 PLOT_SETTINGS = {
-    "font.family": "Helvetica",
-    "font.sans-serif": "Helvetica",
+    # "font.family": "Helvetica",
+    # "font.sans-serif": "Helvetica",
     "pdf.fonttype": 42,
     "ps.fonttype": 42,
 }
+PARAMS_TO_PLOT = (
+    {
+        "dir": TOTAL_POWER_DIR,
+        "param": "total_power",
+        "name": "Alpha total power",
+        "color": "blue",
+    },
+    {
+        "dir": SPARAM_DIR,
+        "param": "linOscAUC",
+        "name": "Alpha oscillatory power",
+        "color": "red",
+    },
+    {
+        "dir": SPARAM_DIR,
+        "param": "exponent",
+        "name": "Aperiodic exponent",
+        "color": "green",
+    },
+)
