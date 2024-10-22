@@ -15,13 +15,11 @@ def midpoint(pos1, pos2):
     return (np.array(pos1) + np.array(pos2)) / 2
 
 
-def plot_sensors(
+def set_montage(
     epochs,
-    ax=None,
     montage_name=params.JNP_MONTAGE,
     custom_channels=params.JNP_CUSTOM_CHANNELS,
 ):
-    """Plot sensors for given epoched data."""
     # Set standard montage and ignore missing channels
     montage = mne.channels.make_standard_montage(montage_name)
 
@@ -48,8 +46,20 @@ def plot_sensors(
         {ch: "eog" for ch in epochs.ch_names if "EOG" in ch}
     )
 
+    # Ignore stim channel
+    epochs.set_channel_types(
+        {ch: "misc" for ch in epochs.ch_names if "stim" in ch.lower()}
+    )
+
     # Set montage
     epochs.set_montage(montage, on_missing="ignore")
+    return epochs
+
+
+def plot_sensors(epochs, ax=None):
+    """Plot sensors for given epoched data."""
+    # Set montage
+    epochs = set_montage(epochs)
 
     # Plot sensors
     epochs.plot_sensors(show_names=True, show=False, axes=ax)
@@ -262,8 +272,55 @@ def plot_sparam_params(
     # Plot aesthetics
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Z-score")
-    ax.legend(loc="upper right", title="Parameter")
+    ax.legend(title="Parameter")
     sns.despine(ax=ax)
+    return
+
+
+def plot_sparam_topomaps(
+    subj_id,
+    fig,
+    big_gs,
+    tp=None,
+    trial_num=0,
+    params_to_plot=params.PARAMS_TO_PLOT,
+):
+    """"""
+    # Make gridspec
+    gs = big_gs.subgridspec(len(params_to_plot), 1)
+
+    # Load spectral parameterization data
+    for i, param in enumerate(params_to_plot):
+        # Load parameter data
+        epochs, times, param_data = load_param_data(
+            subj_id, param["param"], param["dir"]
+        )
+
+        # Set montage
+        epochs = set_montage(epochs)
+        eeg_chs = ["eeg" in ch_type for ch_type in epochs.get_channel_types()]
+        param_data = param_data[:, eeg_chs, :]
+
+        # Select data from just desired trial
+        trial_data = param_data
+        if trial_num is not None:
+            trial_data = param_data[trial_num, :]
+
+        # Select data from just desired time point
+        tp_idx = np.argmin(np.abs(times - tp))
+        tp_data = trial_data[:, tp_idx]
+
+        # Plot topomap
+        ax = fig.add_subplot(gs[i])
+        ax.set_title(param["name"], color=param["color"])
+        ax.set_aspect("equal")
+        mne.viz.plot_topomap(
+            np.real(tp_data),
+            epochs.info,
+            axes=ax,
+            show=False,
+            ch_type="eeg",
+        )
     return
 
 
@@ -303,7 +360,9 @@ def plot_analysis_pipeline(
         subj_id, ax=ax_sparam_params, trial_num=trial_num, tp=tp
     )
 
-    # TO-DO: Plot inverted encoding model
+    # TO-DO: Plot topomaps of spectral parameters for time point
+    gs_topomaps = gs[1, -1]
+    plot_sparam_topomaps(subj_id, fig, gs_topomaps, trial_num=trial_num, tp=tp)
 
     # Save figure
     fig_fname = f"{fig_dir}/fig2_analysis_pipeline.png"
