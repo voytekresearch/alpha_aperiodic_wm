@@ -13,7 +13,7 @@ if __name__ == "__main__":
 
     # Plot CTF slope time courses for desired parameters from spectral
     # parameterization model
-    ctf_slopes, ctf_slopes_null, t_arrays = fit_model_desired_params(
+    ctf_slopes, t_arrays = fit_model_desired_params(
         sp_params=["total_power", "linOscAUC", "exponent"],
         verbose=False,
         single_trials=True,
@@ -27,7 +27,6 @@ if __name__ == "__main__":
     plot_model_fit_time_courses(
         ctf_slopes,
         t_arrays,
-        model_fits_contrast=ctf_slopes_null,
         title="All parameters",
         palettes=["Set1"],
         param_names=param_names,

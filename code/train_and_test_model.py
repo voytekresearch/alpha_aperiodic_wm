@@ -296,7 +296,6 @@ def train_and_test_one_block_set(
 ):
     # Iterate through blocks
     model_fit = np.zeros((n_blocks, n_timepts))
-    model_fit_null = np.zeros((n_blocks, n_timepts))
     for test_block_num in range(n_blocks):
         # Split into training and testing data
         train_data = np.delete(param_arr, test_block_num, axis=1).reshape(
@@ -319,17 +318,7 @@ def train_and_test_one_block_set(
         model_fit[test_block_num, :] = train_and_test_one_block(
             train_data, train_labels, test_data, test_labels, method=method
         )
-
-        # Train IEMs for block of data, with shuffle
-        train_labels_shuffled = np.random.permutation(train_labels)
-        model_fit_null[test_block_num, :] = train_and_test_one_block(
-            train_data,
-            train_labels_shuffled,
-            test_data,
-            test_labels,
-            method=method,
-        )
-    return model_fit, model_fit_null
+    return model_fit
 
 
 def train_and_test_one_subj(
@@ -385,12 +374,9 @@ def train_and_test_one_subj(
 
     # Determine file names
     model_fit_fname = f"{save_dir}/model_fit_{subj}.npy"
-    model_fit_null_fname = f"{save_dir}/model_fit_null_{subj}.npy"
 
     # Skip processing if already done
-    if os.path.exists(model_fit_fname) and os.path.exists(
-        model_fit_null_fname
-    ):
+    if os.path.exists(model_fit_fname):
         return
 
     # Iterate through sets of blocks
@@ -412,7 +398,7 @@ def train_and_test_one_subj(
     )
 
     # Train and test IEMs for each block iteration using multiprocessing
-    model_fit_lst, model_fit_null_lst = [], []
+    model_fit_lst = []
     for param_arr, pos_data in zip(param_arrs, pos_arrs):
         # Skip if no positional data and single trials decoding is desired
         if pos_data is None and single_trials:
@@ -424,8 +410,7 @@ def train_and_test_one_subj(
             method=method,
             single_trials=single_trials,
         )
-        model_fit_lst.append(one_block_set[0])
-        model_fit_null_lst.append(one_block_set[1])
+        model_fit_lst.append(one_block_set)
 
     # Return if no fitting was done
     if not model_fit_lst:
@@ -433,15 +418,12 @@ def train_and_test_one_subj(
 
     # Stack model fits across block iterations
     model_fit = np.stack(model_fit_lst)
-    model_fit_null = np.stack(model_fit_null_lst)
 
     # Average across blocks and block iterations
     mean_model_fit = np.mean(model_fit, axis=(0, 1))
-    mean_model_fit_null = np.mean(model_fit_null, axis=(0, 1))
 
     # Save data to avoid unnecessary re-processing
     np.save(model_fit_fname, mean_model_fit)
-    np.save(model_fit_null_fname, mean_model_fit_null)
 
     # Print processing time if desired
     if verbose:
@@ -534,17 +516,13 @@ def load_model_fits_one_subj(
     # Determine file names
     load_dir = os.path.join(output_dir, param)
     model_fit_fname = f"{load_dir}/model_fit_{subj}.npy"
-    model_fit_null_fname = f"{load_dir}/model_fit_null_{subj}.npy"
 
     # Return if file does not exist
     if not os.path.exists(model_fit_fname):
-        return None, None, None
+        return None, None
 
     # Load slope array
     mean_model_fit = np.load(model_fit_fname)
-
-    # Load null slope array
-    mean_model_fit_null = np.load(model_fit_null_fname)
 
     # Print processing time if desired
     if verbose:
@@ -552,7 +530,7 @@ def load_model_fits_one_subj(
             f"Loading {param} data for {subj} took "
             f"{time.time() - start:.3f} s"
         )
-    return mean_model_fit, mean_model_fit_null, times
+    return mean_model_fit, times
 
 
 def load_all_model_fits(
@@ -568,11 +546,10 @@ def load_all_model_fits(
 
     # Collate outputs from model fitting across subjects
     mean_model_fits = [[] for _ in range(len(subjects_by_task))]
-    mean_model_fits_null = [[] for _ in range(len(subjects_by_task))]
     t_arrays = [[] for _ in range(len(subjects_by_task))]
     for subj in subjs:
         # Add data to big arrays
-        mean_model_fit, mean_model_fit_null, t_arr = load_model_fits_one_subj(
+        mean_model_fit, t_arr = load_model_fits_one_subj(
             subj,
             param,
             param_dir,
@@ -594,20 +571,12 @@ def load_all_model_fits(
 
         # Add data to big arrays
         mean_model_fits[task_num].append(mean_model_fit)
-        mean_model_fits_null[task_num].append(mean_model_fit_null)
         t_arrays[task_num] = t_arr
 
     # Collate outputs from model fitting across subjects
     mean_model_fits = [np.array(model_fit) for model_fit in mean_model_fits]
-    mean_model_fits_null = [
-        np.array(model_fit_null) for model_fit_null in mean_model_fits_null
-    ]
 
-    return (
-        mean_model_fits,
-        mean_model_fits_null,
-        t_arrays,
-    )
+    return mean_model_fits, t_arrays
 
 
 def fit_model_desired_params(
@@ -653,7 +622,6 @@ def fit_model_desired_params(
 
     # Load fit IEMs for all parameters from spectral parameterization
     model_fits_all_params = {}
-    model_fits_null_all_params = {}
     t_all_params = {}
     for sp_param in sp_params:
         # Determine directory containing parameterized data
@@ -662,11 +630,7 @@ def fit_model_desired_params(
             param_dir = total_power_dir
 
         # Load fit IEMs for one parameter
-        (
-            model_fits_one_param,
-            model_fits_null_one_param,
-            t,
-        ) = load_all_model_fits(
+        model_fits_one_param, t = load_all_model_fits(
             sp_param,
             param_dir,
             output_dir=output_dir,
@@ -674,6 +638,5 @@ def fit_model_desired_params(
 
         # Put into dictionaries
         model_fits_all_params[sp_param] = model_fits_one_param
-        model_fits_null_all_params[sp_param] = model_fits_null_one_param
         t_all_params[sp_param] = t
-    return model_fits_all_params, model_fits_null_all_params, t_all_params
+    return model_fits_all_params, t_all_params
