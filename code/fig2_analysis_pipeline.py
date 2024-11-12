@@ -209,7 +209,7 @@ def plot_sparam_psd(
     # Plot alpha AUC measures
     ax.fill_between(
         freqs[low_freq_idx : high_freq_idx + 1],
-        10 ** fm._ap_fit[low_freq_idx - 1 : high_freq_idx],
+        10 ** fm._ap_fit[low_freq_idx : high_freq_idx + 1],
         y2=powers[low_freq_idx : high_freq_idx + 1],
         color="darkorange",
         alpha=0.2,
