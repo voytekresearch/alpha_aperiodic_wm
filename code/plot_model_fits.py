@@ -20,7 +20,6 @@ def plot_model_fit(
     task_timings,
     param_names=None,
     model_output_name="CTF slope",
-    pval_threshold=0.05,
     palette=None,
     save_fname=None,
     plot_timings=True,
@@ -66,6 +65,21 @@ def plot_model_fit(
     # Combine DataFrames of model fits for each parameter into one big DataFrame
     model_fits_big_df = pd.concat(model_fits_dfs).reset_index(drop=True)
 
+    # Z-score model fits using baseline period
+    baseline = model_fits_big_df[model_fits_big_df["Time (s)"] < 0]
+    baseline_stats = (
+        baseline.groupby(["Parameter", "subject"])[model_output_name]
+        .agg(["mean", "std"])
+        .reset_index()
+    )
+    model_fits_big_df = model_fits_big_df.merge(
+        baseline_stats, on=["Parameter", "subject"], suffixes=("", "_pre")
+    )
+    new_model_output_name = f"{model_output_name} (Z-scored on baseline)"
+    model_fits_big_df[new_model_output_name] = (
+        model_fits_big_df[model_output_name] - model_fits_big_df["mean"]
+    ) / model_fits_big_df["std"]
+
     # Plot model fit time course for each parameter
     if ax is None:
         _, ax = plt.subplots(1, 1, figsize=(10, 6))
@@ -74,7 +88,7 @@ def plot_model_fit(
         data=model_fits_big_df,
         hue="Parameter",
         x="Time (s)",
-        y=model_output_name,
+        y=new_model_output_name,
         palette=palette,
         legend="brief",
         ci=ci,
@@ -117,7 +131,7 @@ def plot_model_fit(
         y=1.08,
     )
     ax.set_xlabel("Time (s)", size=28)
-    ax.set_ylabel(model_output_name, size=28)
+    ax.set_ylabel(new_model_output_name, size=28)
     ax.tick_params(labelsize=20)
     sns.despine(ax=ax)
 
