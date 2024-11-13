@@ -18,12 +18,8 @@ def plot_model_fit(
     t_arrays,
     task_num,
     task_timings,
-    model_fits_contrast=None,
     param_names=None,
-    contrast_label="Shuffled location labels?",
-    contrast_vals=("No", "Yes"),
     model_output_name="CTF slope",
-    pval_threshold=0.05,
     palette=None,
     save_fname=None,
     plot_timings=True,
@@ -63,58 +59,26 @@ def plot_model_fit(
             value_name=model_output_name,
         )
         one_param_df["Parameter"] = param_names[param]
-        one_param_df[contrast_label] = contrast_vals[0]
         one_param_df["subject"] = one_param_df.groupby("Time (s)").cumcount()
-
-        # Add DataFrame of model fits for shuffled location labels if desired
-        if model_fits_contrast is not None:
-            one_param_df_contrast = pd.DataFrame(
-                model_fits_contrast[param], columns=t_one_param
-            )
-
-            one_param_df_contrast = one_param_df_contrast.melt(
-                var_name="Time (s)",
-                value_name=model_output_name,
-            )
-            one_param_df_contrast["Parameter"] = param_names[param]
-            one_param_df_contrast[contrast_label] = contrast_vals[1]
-            one_param_df_contrast["subject"] = one_param_df_contrast.groupby(
-                "Time (s)"
-            ).cumcount()
-            one_param_df = pd.concat(
-                (one_param_df, one_param_df_contrast), axis=0
-            )
-
-            # Calculate p-values for each time point
-            stats_df = pd.DataFrame()
-            for tp in sorted(one_param_df["Time (s)"].unique()):
-                # Get model fits for time point
-                tp_df = one_param_df.query("`Time (s)` == @tp")
-
-                # Perform paired t-test
-                tp_stats = pg.pairwise_tests(
-                    dv=model_output_name,
-                    within=contrast_label,
-                    subject="subject",
-                    data=tp_df,
-                )
-                tp_stats["Time (s)"] = tp
-                stats_df = pd.concat((stats_df, tp_stats), ignore_index=True)
-
-            # Correct for multiple comparisons
-            stats_df["p-corr"] = pg.multicomp(
-                stats_df["p-unc"].values,
-                method="fdr_bh",
-            )[1]
-
-            # Add p-values to DataFrame
-            one_param_df["p-corr"] = one_param_df["Time (s)"].map(
-                stats_df.set_index("Time (s)")["p-corr"]
-            )
         model_fits_dfs.append(one_param_df)
 
     # Combine DataFrames of model fits for each parameter into one big DataFrame
     model_fits_big_df = pd.concat(model_fits_dfs).reset_index(drop=True)
+
+    # Z-score model fits using baseline period
+    baseline = model_fits_big_df[model_fits_big_df["Time (s)"] < 0]
+    baseline_stats = (
+        baseline.groupby(["Parameter", "subject"])[model_output_name]
+        .agg(["mean", "std"])
+        .reset_index()
+    )
+    model_fits_big_df = model_fits_big_df.merge(
+        baseline_stats, on=["Parameter", "subject"], suffixes=("", "_pre")
+    )
+    new_model_output_name = f"{model_output_name} (Z-scored on baseline)"
+    model_fits_big_df[new_model_output_name] = (
+        model_fits_big_df[model_output_name] - model_fits_big_df["mean"]
+    ) / model_fits_big_df["std"]
 
     # Plot model fit time course for each parameter
     if ax is None:
@@ -124,40 +88,12 @@ def plot_model_fit(
         data=model_fits_big_df,
         hue="Parameter",
         x="Time (s)",
-        y=model_output_name,
-        style=contrast_label,
+        y=new_model_output_name,
         palette=palette,
         legend="brief",
         ci=ci,
         ax=ax,
     )
-
-    # Plot significance if shuffled provided
-    if model_fits_contrast is not None:
-        # Get labels and colors from axis
-        _, labels = ax.get_legend_handles_labels()
-        for param in model_fits_big_df["Parameter"].unique():
-            # Get y max for plotting significance
-            _, _, _, ymax = ax.axis()
-
-            # Get color for parameter, assuming two lines per parameter
-            color = ax.get_lines()[2 * (labels.index(param) - 1)].get_color()
-
-            # Get DataFrame for parameter
-            param_df = model_fits_big_df.query(f"Parameter == @param")
-
-            # Isolate time points with significant fits
-            unshuffled_df = param_df.query(f"`{contrast_label}` == 'No'")
-            sig_tps = unshuffled_df.query(f"`p-corr` < {pval_threshold}")[
-                "Time (s)"
-            ].values
-
-            # Plot significance
-            print(
-                f"Significant time points for {param}: "
-                f"{len(sig_tps)}/{unshuffled_df.shape[0]}"
-            )
-            ax.plot(sig_tps, [ymax] * len(sig_tps), c=color)
 
     # Plot aesthetics
     legend = ax.legend(loc="upper left", bbox_to_anchor=(1.1, 1))
@@ -195,7 +131,7 @@ def plot_model_fit(
         y=1.08,
     )
     ax.set_xlabel("Time (s)", size=28)
-    ax.set_ylabel(model_output_name, size=28)
+    ax.set_ylabel(new_model_output_name, size=28)
     ax.tick_params(labelsize=20)
     sns.despine(ax=ax)
 
@@ -213,9 +149,6 @@ def plot_model_fit_time_courses(
     param_names=None,
     name="",
     title="",
-    model_fits_contrast=None,
-    contrast_label=None,
-    contrast_vals=None,
     plt_errorbars=False,
     model_output_name="CTF slope",
     subjects_by_task=params.SUBJECTS_BY_TASK,
@@ -243,10 +176,6 @@ def plot_model_fit_time_courses(
         model_fits_one_task = {
             k: v[task_num] for k, v in model_fits_all_params.items()
         }
-        if model_fits_contrast is not None:
-            model_fits_contrast_one_task = {
-                k: v[task_num] for k, v in model_fits_contrast.items()
-            }
         t = {k: v[task_num] for k, v in t_all_params.items()}
 
         # Skip if no data for task
@@ -262,12 +191,7 @@ def plot_model_fit_time_courses(
             model_fits_one_param_set = {
                 k: v for k, v in model_fits_one_task.items() if k in param_set
             }
-            if model_fits_contrast is not None:
-                model_fits_contrast_one_param_set = {
-                    k: v
-                    for k, v in model_fits_contrast_one_task.items()
-                    if k in param_set
-                }
+
             t_one_param_set = {k: v for k, v in t.items() if k in param_set}
 
             # Plot model fit time courses for parameter set and palette
@@ -281,14 +205,6 @@ def plot_model_fit_time_courses(
                 "ax": ax,
                 "model_output_name": model_output_name,
             }
-            if model_fits_contrast is not None:
-                kwargs["model_fits_contrast"] = (
-                    model_fits_contrast_one_param_set
-                )
-            if contrast_label is not None:
-                kwargs["contrast_label"] = contrast_label
-            if contrast_vals is not None:
-                kwargs["contrast_vals"] = contrast_vals
             plot_model_fit(
                 model_fits_one_param_set,
                 t_one_param_set,
@@ -321,7 +237,6 @@ def plot_model_fit_time_courses(
 
 def compare_params_model_fit_time_courses(
     model_fits_all_params,
-    model_fits_null_all_params,
     t_all_params,
     model_output_name="CTF slope",
     sparam_dir=params.SPARAM_DIR,
@@ -392,7 +307,6 @@ def compare_params_model_fit_time_courses(
         plot_model_fit_time_courses(
             model_fits_all_params,
             t_all_params,
-            model_fits_contrast=model_fits_null_all_params,
             model_output_name=model_output_name,
             param_sets=comp_set,
             palettes=palettes,

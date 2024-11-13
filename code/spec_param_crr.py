@@ -13,7 +13,7 @@ if __name__ == "__main__":
 
     # Plot circular correlation coefficient time courses for desired parameters
     # from spectral parameterization model
-    circ_corrcoefs, circ_corrcoefs_null, t_arrays = fit_model_desired_params(
+    circ_corrcoefs, t_arrays = fit_model_desired_params(
         sp_params=["total_power", "linOscAUC", "exponent"],
         method="crr",
         verbose=False,
@@ -27,7 +27,6 @@ if __name__ == "__main__":
     plot_model_fit_time_courses(
         circ_corrcoefs,
         t_arrays,
-        model_fits_contrast=circ_corrcoefs_null,
         model_output_name="Circular correlation coefficient",
         name="crr",
         title="All parameters",
