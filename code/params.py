@@ -159,23 +159,20 @@ PLOT_SETTINGS = {
     "pdf.fonttype": 42,
     "ps.fonttype": 42,
 }
-PARAMS_TO_PLOT = (
-    {
+PARAMS_TO_PLOT = {
+    "total_power": {
         "dir": TOTAL_POWER_DIR,
-        "param": "total_power",
         "name": "Alpha total power",
-        "color": "blue",
+        "color": "#BB7A61",
     },
-    {
+    "linOscAUC": {
         "dir": SPARAM_DIR,
-        "param": "linOscAUC",
         "name": "Alpha oscillatory power",
-        "color": "red",
+        "color": "#9EBFAF",
     },
-    {
+    "exponent": {
         "dir": SPARAM_DIR,
-        "param": "exponent",
         "name": "Aperiodic exponent",
-        "color": "green",
+        "color": "#777893",
     },
-)
+}

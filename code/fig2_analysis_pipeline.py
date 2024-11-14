@@ -241,21 +241,20 @@ def plot_sparam_params(
     ch=params.CHANNELS_TO_PLOT[0],
     params_to_plot=params.PARAMS_TO_PLOT,
 ):
-    """"""
-    # Load spectral parameterization data
-    for param in params_to_plot:
+    """Plot spectral parameters across time."""
+    for param_key, param in params_to_plot.items():
         # Load parameter data
         epochs, times, param_data = load_param_data(
-            subj_id, param["param"], param["dir"]
+            subj_id, param_key, param["dir"]
         )
 
-        # Select data from just desired channel
+        # Select data from the desired channel
         ch_data = param_data
         if ch is not None:
             ch_idx = epochs.ch_names.index(ch)
             ch_data = param_data[:, ch_idx, :]
 
-        # Select data from just desired trial
+        # Select data for the desired trial
         trial_data = ch_data
         if trial_num is not None:
             trial_data = ch_data[trial_num, :]
@@ -263,7 +262,7 @@ def plot_sparam_params(
         # Z-score data
         trial_data = (trial_data - np.mean(trial_data)) / np.std(trial_data)
 
-        # Plot parameter data\
+        # Plot parameter data
         ax.plot(times, trial_data, label=param["name"], color=param["color"])
 
     # Mark time point of interest if provided
@@ -286,15 +285,14 @@ def plot_sparam_topomaps(
     trial_num=0,
     params_to_plot=params.PARAMS_TO_PLOT,
 ):
-    """"""
+    """Plot topomaps of spectral parameters at a given time point."""
     # Make gridspec
     gs = big_gs.subgridspec(len(params_to_plot), 1)
 
-    # Load spectral parameterization data
-    for i, param in enumerate(params_to_plot):
+    for i, (param_key, param) in enumerate(params_to_plot.items()):
         # Load parameter data
         epochs, times, param_data = load_param_data(
-            subj_id, param["param"], param["dir"]
+            subj_id, param_key, param["dir"]
         )
 
         # Set montage
@@ -302,12 +300,12 @@ def plot_sparam_topomaps(
         eeg_chs = ["eeg" in ch_type for ch_type in epochs.get_channel_types()]
         param_data = param_data[:, eeg_chs, :]
 
-        # Select data from just desired trial
+        # Select data from the desired trial
         trial_data = param_data
         if trial_num is not None:
             trial_data = param_data[trial_num, :]
 
-        # Select data from just desired time point
+        # Select data from the desired time point
         tp_idx = np.argmin(np.abs(times - tp))
         tp_data = trial_data[:, tp_idx]
 
