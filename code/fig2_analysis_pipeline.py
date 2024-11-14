@@ -216,21 +216,29 @@ def plot_sparam_psd(
     )
 
     # Plot AUC measure for band
+    y_min, y_max = ax.get_ylim()
     ax.fill_between(
         freqs[low_freq_idx : high_freq_idx + 1],
         10 ** fm._ap_fit[low_freq_idx : high_freq_idx + 1],
         y2=powers[low_freq_idx : high_freq_idx + 1],
-        hatch="/",
         color=params_to_plot["linOscAUC"]["color"],
-        alpha=0.5,
+        alpha=0.8,
         label=params_to_plot["linOscAUC"]["name"],
+    )
+    ax.fill_between(
+        freqs[low_freq_idx : high_freq_idx + 1],
+        0,
+        hatch="/",
+        y2=powers[low_freq_idx : high_freq_idx + 1],
+        color=params_to_plot["total_power"]["color"],
+        alpha=0.5,
+        label=params_to_plot["total_power"]["name"],
     )
 
     # Plot greek character
-    y_min, y_max = ax.get_ylim()
     ax.text(
         (freqs[low_freq_idx] + freqs[high_freq_idx]) / 2,
-        y_min + 0.9 * (y_max - y_min),
+        0.9 * y_max,
         rf'$\{params_to_plot["linOscAUC"]["name"].split()[0].lower()}$',
         fontsize=24,
         color=params_to_plot["linOscAUC"]["color"],
@@ -240,14 +248,15 @@ def plot_sparam_psd(
 
     # Plot bands
     ax.fill_betweenx(
-        [y_min, y_max],
+        [0, y_max],
         freqs[low_freq_idx],
         freqs[high_freq_idx],
         facecolor=params_to_plot["total_power"]["color"],
-        alpha=0.2,
+        alpha=0.1,
     )
 
     # Plot aesthetics
+    ax.set_ylim([0, y_max])
     ax.grid(False)
     sns.despine(ax=ax)
     ax.legend(loc="upper right")
