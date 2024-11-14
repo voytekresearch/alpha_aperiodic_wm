@@ -3,7 +3,7 @@ import numpy as np
 import os
 import cmasher as cmr
 from train_and_test_model import fit_model_desired_params
-from fig3_iem_model_fits import plot_model_fit_time_courses
+from fig3_compare_model_fits_across_tasks import plot_model_fit_time_courses
 import params
 
 
