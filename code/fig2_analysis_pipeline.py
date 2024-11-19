@@ -70,13 +70,16 @@ def plot_sensors(epochs, ax=None):
 
 def plot_epochs(
     epochs,
-    ax,
+    gs_subplot,
     tp=None,
     trial_num=0,
     chs_to_plot=params.CHANNELS_TO_PLOT,
     time_window_len=params.TIME_WINDOW_LEN,
 ):
-    """Plot epoched data for a specific trial."""
+    """Plot epoched data for a specific trial with channels stacked vertically."""
+    import matplotlib.gridspec as gridspec
+    from matplotlib.patches import Rectangle
+
     # Get the data for the specified trial
     if trial_num >= len(epochs.events):
         raise ValueError(f"Trial number {trial_num} is out of range.")
@@ -92,31 +95,52 @@ def plot_epochs(
     # Get channel data
     ch_data = trial_epochs.apply_baseline().get_data(picks=chs_to_plot)
 
-    # Get the spectral palette with different colors for each channel
-    colors = sns.color_palette("mako", len(chs_to_plot))
+    # Create a GridSpec for the provided SubplotSpec
+    n_channels = len(chs_to_plot)
+    gs = gridspec.GridSpecFromSubplotSpec(
+        n_channels, 1, subplot_spec=gs_subplot, hspace=0.4
+    )
 
-    # Plot epochs
-    for i, (ch, c) in enumerate(zip(chs_to_plot, colors)):
-        ax.plot(trial_epochs.times, ch_data[0, i, :], color=c, label=ch)
-        ax.set_xlabel("Time (s)")
-        ax.set_ylabel("Amplitude (µV)")
-    ax.legend(title="Channel", loc="upper left")
-    sns.despine(ax=ax)
+    # Create individual axes for each channel
+    axes = []
+    for i, ch in enumerate(chs_to_plot):
+        sub_ax = plt.subplot(gs[i])
+        sub_ax.plot(trial_epochs.times, ch_data[0, i, :], color="black")
+        sub_ax.set_ylabel(ch, rotation=0, labelpad=20, ha="right", va="center")
+        sub_ax.tick_params(
+            axis="y", which="both", left=False
+        )  # Remove y-axis ticks
+        sub_ax.set_yticks([])  # No y-axis tick labels
+        sns.despine(ax=sub_ax, left=True)
 
-    # Mark time point of interest if provided
-    if tp is not None:
-        yrange = ax.get_ylim()[1] - ax.get_ylim()[0]
-        rect = Rectangle(
-            (tp - time_window_len / 2, ax.get_ylim()[0] + 0.025 * yrange),
-            time_window_len,
-            0.975 * yrange,
-            ec=(0, 0, 0, 0.5),
-            fc=(0, 0, 0, 0.1),
-            ls="--",
-            lw=3,
-        )
-        ax.add_patch(rect)
-    return
+        # Add bounding box to the current axis
+        if tp is not None and ch == chs_to_plot[0]:
+            yrange = sub_ax.get_ylim()[1] - sub_ax.get_ylim()[0]
+            rect = Rectangle(
+                (
+                    tp - time_window_len / 2,
+                    sub_ax.get_ylim()[0] + 0.025 * yrange,
+                ),
+                time_window_len,
+                0.975 * yrange,
+                ec="black",
+                fc="gray",
+                alpha=0.2,
+                ls="--",
+                lw=2,
+            )
+            sub_ax.add_patch(rect)
+
+        axes.append(sub_ax)
+
+    # Label the x-axis only for the last subplot
+    for sub_ax in axes[:-1]:
+        sub_ax.set_xticklabels(
+            []
+        )  # Remove x-axis labels for all but the last subplot
+    axes[-1].set_xlabel("Time (s)")
+
+    return axes
 
 
 def plot_multitaper(
@@ -403,9 +427,10 @@ def plot_analysis_pipeline(
     fig = plt.figure(figsize=(18, 12))
     gs = fig.add_gridspec(2, 6, figure=fig)
 
-    # Plot epochs
-    ax_epochs = fig.add_subplot(gs[0, :3])
-    plot_epochs(epochs.copy(), ax=ax_epochs, tp=tp, trial_num=trial_num)
+    # Plot epochs directly using the grid space
+    axes_epochs = plot_epochs(
+        epochs.copy(), gs[0, :3], tp=tp, trial_num=trial_num
+    )
 
     # Plot multitaper decomposition
     ax_multitaper = fig.add_subplot(gs[0, 3:])
@@ -430,7 +455,12 @@ def plot_analysis_pipeline(
     plot_sparam_topomaps(subj_id, fig, gs_topomaps, trial_num=trial_num, tp=tp)
 
     # Add letter labels
-    axes = [ax_epochs, ax_multitaper, ax_sparam, ax_sparam_params, ax_topomaps]
+    axes = [axes_epochs[0]] + [  # First subplot in plot_epochs
+        ax_multitaper,
+        ax_sparam,
+        ax_sparam_params,
+        ax_topomaps,
+    ]
     add_letter_labels(axes)
 
     # Save figure
