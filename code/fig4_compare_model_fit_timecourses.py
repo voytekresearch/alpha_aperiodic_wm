@@ -10,98 +10,117 @@ from train_and_test_model import fit_model_desired_params
 import params
 
 
-def compare_model_fits_one_window(
+def compare_model_fits_across_windows(
     model_fits,
     t_arrays,
-    t_window,
-    model_fits_shuffled=None,
     palette=None,
     model_output_name="CTF slope",
     save_fname=None,
     task_timings=params.TASK_TIMINGS,
     fig_dir=params.FIG_DIR,
 ):
-    """Plot paired t-tests of model fits over averaged time window for multiple
-    parameters.
-    """
-    # Make empty list for model fit DataFrames
-    model_fits_dfs = []
-    for i, (model_fit, t_arr) in enumerate(zip(model_fits, t_arrays)):
-        # If time window is None, use task timings
-        if t_window == "delay":
-            t_window = task_timings[i]
+    """Plot model fits averaged over specified time windows with statistical annotations."""
 
-        # Average across time window
-        t_window_idx = np.where(
-            (t_arr >= t_window[0]) & (t_arr <= t_window[1])
-        )[0]
-        model_fit = np.mean(model_fit[:, t_window_idx], axis=1)
-        if model_fits_shuffled is not None:
-            model_fit_shuffled = np.mean(
-                model_fits_shuffled[i][:, t_window_idx], axis=1
-            )
-
-        # Make DataFrame of model fits
-        model_fit_df = pd.DataFrame(
-            model_fit, columns=[model_output_name]
-        ).reset_index(names="trial")
-        model_fit_df.loc[:, "Shuffled location labels?"] = "No"
-        model_fit_df.loc[:, "Task"] = str(i + 1)
-
-        # Add DataFrame of model fits for shuffled location labels if desired
-        if model_fit_shuffled is not None:
-            model_fit_shuffled_df = pd.DataFrame(
-                model_fit_shuffled, columns=[model_output_name]
-            ).reset_index(names="trial")
-            model_fit_shuffled_df.loc[:, "Shuffled location labels?"] = "Yes"
-            model_fit_shuffled_df.loc[:, "Task"] = str(i + 1)
-            model_fit_df = pd.concat(
-                (model_fit_df, model_fit_shuffled_df), axis=0
-            )
-
-        # Add DataFrame to list
-        model_fits_dfs.append(model_fit_df)
-
-    # Combine DataFrames of model fits from each task into one big DataFrame
-    model_fits_big_df = pd.concat(model_fits_dfs).reset_index(drop=True)
-
-    # Plot paired t-tests of model fits for each task
-    plt.figure(figsize=(10, 6))
-    ax = sns.violinplot(
-        data=model_fits_big_df,
-        x="Task",
-        y=model_output_name,
-        split=True,
-        hue="Shuffled location labels?",
-        palette=palette,
-        inner="stick",
+    # Iterate over parameters and create subplots
+    fig, axes = plt.subplots(
+        1, len(model_fits), figsize=(8 * len(model_fits), 6), sharey=True
     )
-    pairs = [
-        ((str(task_num), "No"), (str(task_num), "Yes"))
-        for task_num in list(set(model_fits_big_df["Task"]))
-    ]
-    annotator = Annotator(
-        ax,
-        pairs,
-        data=model_fits_big_df,
-        x="Task",
-        y=model_output_name,
-        hue="Shuffled location labels?",
-        plot="violinplot",
-    )
-    annotator.configure(
-        test="t-test_paired",
-        text_format="star",
-        comparisons_correction="bonferroni",
-    )
-    annotator.apply_and_annotate()
-    sns.despine(ax=ax)
+    if len(model_fits) == 1:  # Handle single subplot case
+        axes = [axes]
 
-    # Save figure
+    for ax, (param_name, model_fits_one_param) in zip(
+        axes, model_fits.items()
+    ):
+        t_arr = t_arrays[param_name]  # Get corresponding time array
+
+        # Make empty list for DataFrames for this parameter
+        model_fits_dfs = []
+
+        # Process each task separately
+        for task_num, model_fit_task in enumerate(model_fits_one_param):
+            t_one_task = t_arr[task_num]
+
+            # Define task-specific time windows
+            current_task_timings = task_timings[task_num]
+            time_windows = {
+                "baseline": (None, 0),
+                "stim": (0, current_task_timings[0]),
+                "delay": current_task_timings,
+            }
+
+            # Iterate over time windows
+            for window_name, t_window in time_windows.items():
+                # Define time window boundaries, replacing None with min/max
+                t_start = (
+                    t_window[0] if t_window[0] is not None else t_one_task[0]
+                )
+                t_end = (
+                    t_window[1] if t_window[1] is not None else t_one_task[-1]
+                )
+
+                # Compute indices for the time window
+                t_window_idx = np.where(
+                    (t_one_task >= t_start) & (t_one_task <= t_end)
+                )[0]
+                avg_model_fit = np.mean(
+                    model_fit_task[:, t_window_idx], axis=1
+                )
+
+                # Create a DataFrame for this parameter and task
+                df = pd.DataFrame(avg_model_fit, columns=[model_output_name])
+                df["Task"] = str(task_num + 1)
+                df["Time Window"] = window_name
+                model_fits_dfs.append(df)
+
+        # Combine DataFrames for this parameter into one DataFrame
+        model_fits_big_df = pd.concat(model_fits_dfs).reset_index(drop=True)
+
+        # Plot using seaborn
+        sns.violinplot(
+            data=model_fits_big_df,
+            x="Task",
+            y=model_output_name,
+            hue="Time Window",
+            palette=palette,
+            inner="stick",
+            ax=ax,
+        )
+        ax.set_title(param_name, fontsize=16)
+        ax.legend(
+            title="Time Window", bbox_to_anchor=(1.05, 1), loc="upper left"
+        )
+
+        # Statistical annotations: Compare "baseline" to other time windows globally
+        pairs_set1 = [
+            ((task, "baseline"), (task, "stim"))
+            for task in model_fits_big_df["Task"].unique()
+        ]
+        pairs_set2 = [
+            ((task, "baseline"), (task, "delay"))
+            for task in model_fits_big_df["Task"].unique()
+        ]
+        pairs = pairs_set1 + pairs_set2
+        annotator = Annotator(
+            ax=ax,
+            pairs=pairs,
+            data=model_fits_big_df,
+            x="Task",
+            y=model_output_name,
+            hue="Time Window",
+        )
+        annotator.configure(
+            test="t-test_paired",
+            text_format="star",
+            comparisons_correction="bonferroni",
+        )
+        annotator.apply_and_annotate()
+
+    plt.tight_layout()
+
+    # Save the figure if needed
     if save_fname:
         os.makedirs(fig_dir, exist_ok=True)
-        save_fname = f"{fig_dir}/{save_fname}"
-        plt.savefig(save_fname, bbox_inches="tight", dpi=300)
+        plt.savefig(f"{fig_dir}/{save_fname}", bbox_inches="tight", dpi=300)
     return
 
 
@@ -109,22 +128,15 @@ if __name__ == "__main__":
     # Set seed
     np.random.seed(params.SEED)
 
-    # Plot paired t-tests of model fits over averaged time window for multiple
-    # parameters
+    # Plot model fits across time windows
     ctf_slopes, t_arrays = fit_model_desired_params(
         sp_params=["total_power", "linOscAUC", "exponent"],
         verbose=False,
     )
-    param_names = {
-        "total_power": "Alpha total power",
-        "linOscAUC": "Alpha oscillatory power",
-        "exponent": "Aperiodic exponent",
-    }
-    compare_model_fits_one_window(
+    compare_model_fits_across_windows(
         ctf_slopes,
         t_arrays,
-        t_window="delay",
-        palette=cmr.take_cmap_colors("linear_blue_95_50_c20", 2),
+        palette=sns.color_palette("Set1", 3),
         model_output_name="CTF slope",
-        save_fname="model_fits_paired_ttest.png",
+        save_fname="fig4_compare_model_fit_timecourses.png",
     )
