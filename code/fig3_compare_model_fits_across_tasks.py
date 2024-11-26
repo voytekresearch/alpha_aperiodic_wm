@@ -11,14 +11,36 @@ from train_and_test_model import fit_model_desired_params
 import params
 
 
+def zscore_model_fits(model_fits, model_output_name="CTF slope"):
+    """Z-score model fits using baseline period."""
+    # Compute mean and standard deviation of model output during baseline period
+    baseline = model_fits[model_fits["Time (s)"] < 0]
+    baseline_stats = (
+        baseline.groupby(["Parameter", "subject"])[model_output_name]
+        .agg(["mean", "std"])
+        .reset_index()
+    )
+
+    # Merge baseline statistics with model fits
+    model_fits = model_fits.merge(
+        baseline_stats, on=["Parameter", "subject"], suffixes=("", "_pre")
+    )
+
+    # Z-score model output using baseline statistics
+    new_model_output_name = f"{model_output_name} (Z-scored on baseline)"
+    model_fits[new_model_output_name] = (
+        model_fits[model_output_name] - model_fits["mean"]
+    ) / model_fits["std"]
+    return model_fits, new_model_output_name
+
+
 def plot_model_fit(
     model_fits,
     t_arrays,
     task_num,
     task_timings,
-    param_names=None,
+    params_to_plot=params.PARAMS_TO_PLOT,
     model_output_name="CTF slope",
-    palette=None,
     save_fname=None,
     plot_timings=True,
     plot_errorbars=False,
@@ -31,17 +53,33 @@ def plot_model_fit(
     model_fits : dict
         Dictionary containing model fits for each parameter. Keys are parameter
         names and values are arrays containing model fits.
-    t_arr : np.ndarray
-        Array containing time points.
-    palette : dict (default: None)
-        Dictionary containing colors for each parameter.  Keys are parameter
-        names and values are colors.  If None, default colors will be used.
+    t_arrays : dict
+        Dictionary containing time points for each parameter.
+    task_num : int
+        Task number.
+    task_timings : list
+        Timing of task events (e.g., onset, offset, etc.).
+    params_to_plot : dict
+        Dictionary containing metadata (e.g., color, label) for parameters to plot.
+    model_output_name : str (default: "CTF slope")
+        Name of the model output to display.
     save_fname : str (default: None)
-        File name to save figure to.  If None, figure will not be saved.
+        File name to save the figure.
+    plot_timings : bool (default: True)
+        Whether to plot task timings.
+    plot_errorbars : bool (default: False)
+        Whether to include error bars in the plot.
+    ax : matplotlib.axes.Axes (default: None)
+        Axes on which to plot.
     """
-    # Set default parameter names
-    if param_names is None:
-        param_names = {k: k for k in model_fits.keys()}
+    # Extract parameter names and colors from params_to_plot
+    param_names = {
+        param: details["name"] for param, details in params_to_plot.items()
+    }
+    palette = {
+        details["name"]: details["color"]
+        for details in params_to_plot.values()
+    }
 
     # Make empty list for model fit DataFrames
     model_fits_dfs = []
@@ -64,19 +102,10 @@ def plot_model_fit(
     model_fits_big_df = pd.concat(model_fits_dfs).reset_index(drop=True)
 
     # Z-score model fits using baseline period
-    baseline = model_fits_big_df[model_fits_big_df["Time (s)"] < 0]
-    baseline_stats = (
-        baseline.groupby(["Parameter", "subject"])[model_output_name]
-        .agg(["mean", "std"])
-        .reset_index()
+    model_fits_big_df, new_model_output_name = zscore_model_fits(
+        model_fits_big_df,
+        model_output_name=model_output_name,
     )
-    model_fits_big_df = model_fits_big_df.merge(
-        baseline_stats, on=["Parameter", "subject"], suffixes=("", "_pre")
-    )
-    new_model_output_name = f"{model_output_name} (Z-scored on baseline)"
-    model_fits_big_df[new_model_output_name] = (
-        model_fits_big_df[model_output_name] - model_fits_big_df["mean"]
-    ) / model_fits_big_df["std"]
 
     # Plot model fit time course for each parameter
     if ax is None:
@@ -143,8 +172,7 @@ def plot_model_fit_time_courses(
     model_fits_all_params,
     t_all_params,
     param_sets=None,
-    palettes=None,
-    param_names=None,
+    params_to_plot=params.PARAMS_TO_PLOT,
     name="",
     title="",
     plt_errorbars=False,
@@ -154,22 +182,43 @@ def plot_model_fit_time_courses(
     task_timings=params.TASK_TIMINGS,
 ):
     """Plot model fit time courses for total power and parameters from spectral
-    parameterization."""
-    # Set default parameter sets, palettes, and parameter names
+    parameterization.
+
+    Parameters
+    ----------
+    model_fits_all_params : dict
+        Dictionary containing model fits for all parameters across tasks.
+    t_all_params : dict
+        Dictionary containing time arrays for all parameters across tasks.
+    param_sets : list of list (default: None)
+        List of parameter sets to plot. If None, plots all parameters together.
+    params_to_plot : dict (default: params.PARAMS_TO_PLOT)
+        Dictionary containing metadata (e.g., color, label) for parameters to plot.
+    name : str (default: "")
+        Name to append to saved figure file.
+    title : str (default: "")
+        Title of the figure.
+    plt_errorbars : bool (default: False)
+        Whether to include error bars in the plots.
+    model_output_name : str (default: "CTF slope")
+        Name of the model output to display.
+    subjects_by_task : dict
+        Dictionary specifying subjects for each task.
+    fig_dir : str
+        Directory to save the figure.
+    task_timings : list
+        List of task timing intervals.
+    """
+    # Set default parameter sets
     if param_sets is None:
         param_sets = [list(model_fits_all_params.keys())]
-    if palettes is None:
-        palettes = ["rocket"]
-    if param_names is None:
-        param_names = {k: k for k in model_fits_all_params.keys()}
 
     # Create a GridSpec with one row and the number of tasks as columns
     num_tasks = len(subjects_by_task)
-    fig = plt.figure(figsize=(48, 15), constrained_layout=True)
-    gs = gridspec.GridSpec(2, num_tasks // 2 + 1, figure=fig)
+    fig = plt.figure(figsize=(24, 36), constrained_layout=True)
+    gs = gridspec.GridSpec(num_tasks // 2 + 1, 2, figure=fig)
 
-    # Plot model fit time courses for parameters from spectral parameterization
-    # model
+    # Plot model fit time courses for parameters
     for task_num in range(len(subjects_by_task)):
         model_fits_one_task = {
             k: v[task_num] for k, v in model_fits_all_params.items()
@@ -181,37 +230,31 @@ def plot_model_fit_time_courses(
             continue
 
         # Get the corresponding subplot from the GridSpec
-        ax = fig.add_subplot(gs[task_num % 2, task_num // 2])
+        ax = fig.add_subplot(gs[task_num // 2, task_num % 2])
 
-        # Plot model fit time courses for each parameter set and palette
-        for i, (param_set, palette) in enumerate(zip(param_sets, palettes)):
+        # Plot model fit time courses for each parameter set
+        for i, param_set in enumerate(param_sets):
             # Get model fits for parameter set
             model_fits_one_param_set = {
                 k: v for k, v in model_fits_one_task.items() if k in param_set
             }
-
             t_one_param_set = {k: v for k, v in t.items() if k in param_set}
 
-            # Plot model fit time courses for parameter set and palette
+            # Plot model fit time courses for parameter set
             plt_timings = i == len(param_sets) - 1
-            param_names_param_set = {k: param_names[k] for k in param_set}
-            kwargs = {
-                "palette": palette,
-                "param_names": param_names_param_set,
-                "plot_timings": plt_timings,
-                "plot_errorbars": plt_errorbars,
-                "ax": ax,
-                "model_output_name": model_output_name,
-            }
             plot_model_fit(
                 model_fits_one_param_set,
                 t_one_param_set,
                 task_num,
                 task_timings[task_num],
-                **kwargs,
+                params_to_plot=params_to_plot,
+                plot_timings=plt_timings,
+                plot_errorbars=plt_errorbars,
+                ax=ax,
+                model_output_name=model_output_name,
             )
 
-    # Get legend handles and labels from last axis
+    # Get legend handles and labels from the last axis
     handles, labels = ax.get_legend_handles_labels()
     dup_idx = np.where(pd.DataFrame(labels).duplicated(keep=False))[0]
     remove_idx = dup_idx[1 : 1 + len(dup_idx) // 2]
@@ -219,17 +262,14 @@ def plot_model_fit_time_courses(
     labels = [l for i, l in enumerate(labels) if i not in remove_idx]
     ax_legend = fig.add_subplot(gs[-1, -1])
     ax_legend.axis("off")
-    ax_legend.legend(handles, labels, loc="center", ncol=2, fontsize=24)
-
-    # Add title
-    fig.suptitle(title, fontsize=64, fontweight="bold", y=1.05)
+    ax_legend.legend(handles, labels, loc="center", fontsize=36)
 
     # Save figure
     os.makedirs(fig_dir, exist_ok=True)
-    model_fits_fname = f"{fig_dir}/model_fits.png"
+    model_fits_fname = f"{fig_dir}/fig3_compare_model_fits_across_tasks.png"
     if len(name) > 0:
         model_fits_fname = model_fits_fname.replace(".", f"_{name}.")
-    plt.savefig(model_fits_fname, dpi=300, bbox_inches="tight")
+    plt.savefig(model_fits_fname, dpi=300)
     plt.close()
 
 
@@ -243,17 +283,10 @@ if __name__ == "__main__":
         sp_params=["total_power", "linOscAUC", "exponent"],
         verbose=False,
     )
-    param_names = {
-        "total_power": "Alpha total power",
-        "linOscAUC": "Alpha oscillatory power",
-        "exponent": "Aperiodic exponent",
-    }
     plot_model_fit_time_courses(
         ctf_slopes,
         t_arrays,
         title="All parameters",
-        palettes=["Set1"],
-        param_names=param_names,
         plt_errorbars=True,
         name="iem",
     )
