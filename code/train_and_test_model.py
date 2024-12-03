@@ -70,7 +70,12 @@ def load_param_data(
 
 
 def equalize_param_data_across_trial_blocks(
-    epochs, times, param_data, average=True, n_blocks=params.N_BLOCKS
+    epochs,
+    times,
+    param_data,
+    average=True,
+    n_blocks=params.N_BLOCKS,
+    distractors=False,
 ):
     """Equalize parameterized data across trials blocks such that there are an
     equal number of trials for each location bin. Then, average across trials
@@ -82,33 +87,38 @@ def equalize_param_data_across_trial_blocks(
         Epochs object containing EEG data.
     times : np.ndarray
         Time course.
-    pos_data : dict
-        Dictionary containing positional data.
     param_data : np.ndarray
         Array containing parameterized data for decoding.
     average : bool (default: True)
         Whether to average across trials for each location bin.
     n_blocks : int (default: params.N_BLOCKS)
         Number of blocks to split trials into.
+    distractors : bool (default: False)
+        Whether to include distractor data.
 
     Returns
     -------
     param_arr : np.ndarray
         Array containing averaged parameterized data for decoding.
+    pos_arr : np.ndarray or None
+        Array containing positional data or None if skipped due to NaN.
     """
     # Extract positional data from epochs
     pos_bins = epochs.metadata["pos_bin"].values
     pos_data = epochs.metadata["pos"].values
+    if distractors:
+        pos_bins = epochs.metadata["pos_bin_nt"].values
+        pos_data = epochs.metadata["pos_nt"].values
 
-    # Make sure positional data is valid
-    if pos_data[0] is None:
-        pos_data = None
-    if pos_data is not None:
-        assert np.count_nonzero(np.isnan(pos_data)) == 0
-        assert 0 <= pos_data.any() < 360
+    # Check for None values and skip processing if any are found
+    if np.any(pos_bins == None) or np.any(pos_data == None):
+        return None, None
 
-    # Extract relative variables from position bins
-    assert np.count_nonzero(np.isnan(pos_bins)) == 0
+    # Ensure positional data is valid
+    assert 0 <= pos_bins.min() < 360, "Invalid values in pos_bins."
+    assert 0 <= pos_data.min() < 360, "Invalid values in pos_data."
+
+    # Proceed with the rest of the function as is...
     n_bins = np.sum(~np.isnan(np.unique(pos_bins)))
     n_channels = epochs.get_data(copy=True).shape[-2]
     n_timepts = len(times)
@@ -121,7 +131,7 @@ def equalize_param_data_across_trial_blocks(
         np.argsort(pos_bins), np.where(np.diff(sorted(pos_bins)))[0] + 1
     )
 
-    # Calculate parameterized data for block of trials
+    # Initialize arrays for processed data
     n_segments = n_bins
     if not average:
         n_segments *= n_trials_per_bin_per_block
@@ -329,6 +339,7 @@ def train_and_test_one_subj(
     output_dir=params.IEM_OUTPUT_DIR,
     method="iem",
     single_trials=False,
+    distractors=False,
     verbose=True,
 ):
     """Train and test one subject.
@@ -391,11 +402,18 @@ def train_and_test_one_subj(
                     times,
                     param_data,
                     average=not single_trials,
+                    distractors=distractors,
                 )
                 for _ in range(n_block_iters)
             ]
         )
     )
+
+    # Skip processing if any block returned None
+    if any(param_arr is None for param_arr in param_arrs):
+        if verbose:
+            print(f"Skipping {subj} due to None values in positional data.")
+        return
 
     # Train and test IEMs for each block iteration using multiprocessing
     model_fit_lst = []
@@ -463,6 +481,7 @@ def train_and_test_all_subjs(
     method="iem",
     output_dir=params.IEM_OUTPUT_DIR,
     single_trials=False,
+    distractors=False,
 ):
     """Train and test for all subjects.
 
@@ -496,6 +515,7 @@ def train_and_test_all_subjs(
             method=method,
             output_dir=output_dir,
             single_trials=single_trials,
+            distractors=distractors,
         )
 
 
@@ -586,10 +606,15 @@ def fit_model_desired_params(
     method="iem",
     output_dir=params.IEM_OUTPUT_DIR,
     single_trials=False,
+    distractors=False,
     verbose=True,
 ):
     """Fit desired model for total power and all parameters from spectral
     parameterization."""
+    # If distractors, set output directory to reflect this
+    if distractors:
+        output_dir = f"{output_dir}_distractors"
+
     # Determine all parameters to fit IEM for
     if sp_params == "all":
         sp_params = {
@@ -616,6 +641,7 @@ def fit_model_desired_params(
             method=method,
             output_dir=output_dir,
             single_trials=single_trials,
+            distractors=distractors,
         )
         if verbose:
             print(f"Fit IEMs for {sp_param} in {time.time() - start:.2f} s")
