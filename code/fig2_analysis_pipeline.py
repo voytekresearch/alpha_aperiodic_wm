@@ -6,6 +6,7 @@ from matplotlib.patches import Rectangle
 import mne
 import seaborn as sns
 import numpy as np
+import os
 import pandas as pd
 import string
 import params
@@ -69,42 +70,77 @@ def plot_sensors(epochs, ax=None):
 
 def plot_epochs(
     epochs,
-    ax,
+    gs_subplot,
     tp=None,
+    trial_num=0,
     chs_to_plot=params.CHANNELS_TO_PLOT,
     time_window_len=params.TIME_WINDOW_LEN,
 ):
-    """Plot epoched data."""
+    """Plot epoched data for a specific trial with channels stacked vertically."""
+    import matplotlib.gridspec as gridspec
+    from matplotlib.patches import Rectangle
+
+    # Get the data for the specified trial
+    if trial_num >= len(epochs.events):
+        raise ValueError(f"Trial number {trial_num} is out of range.")
+
+    trial_epochs = epochs[trial_num].copy()
+
+    # Check and filter valid channels
+    chs_to_plot = [ch for ch in chs_to_plot if ch in trial_epochs.ch_names]
+    if not chs_to_plot:
+        print("No valid channels to plot.")
+        return
+
     # Get channel data
-    if chs_to_plot is None:
-        chs_to_plot = epochs.ch_names
-    ch_data = epochs.copy().apply_baseline().get_data(picks=chs_to_plot)
+    ch_data = trial_epochs.apply_baseline().get_data(picks=chs_to_plot)
 
-    # Get the spectral palette with different color for each channel
-    colors = sns.color_palette("mako", len(chs_to_plot))
+    # Create a GridSpec for the provided SubplotSpec
+    n_channels = len(chs_to_plot)
+    gs = gridspec.GridSpecFromSubplotSpec(
+        n_channels, 1, subplot_spec=gs_subplot, hspace=0.4
+    )
 
-    # Plot epochs
-    for i, (ch, c) in enumerate(zip(chs_to_plot, colors)):
-        ax.plot(epochs.times, ch_data[0, i, :], color=c, label=ch)
-        ax.set_xlabel("Time (s)")
-        ax.set_ylabel("Amplitude (µV)")
-    ax.legend(title="Channel", loc="upper left")
-    sns.despine(ax=ax)
+    # Create individual axes for each channel
+    axes = []
+    for i, ch in enumerate(chs_to_plot):
+        sub_ax = plt.subplot(gs[i])
+        sub_ax.plot(trial_epochs.times, ch_data[0, i, :], color="black")
+        sub_ax.set_ylabel(ch, rotation=0, labelpad=20, ha="right", va="center")
+        sub_ax.tick_params(
+            axis="y", which="both", left=False
+        )  # Remove y-axis ticks
+        sub_ax.set_yticks([])  # No y-axis tick labels
+        sns.despine(ax=sub_ax, left=True)
 
-    # Mark time point of interest if provided
-    if tp is not None:
-        yrange = ax.get_ylim()[1] - ax.get_ylim()[0]
-        rect = Rectangle(
-            (tp - time_window_len / 2, ax.get_ylim()[0] + 0.025 * yrange),
-            time_window_len,
-            0.975 * yrange,
-            ec=(0, 0, 0, 0.5),
-            fc=(0, 0, 0, 0.1),
-            ls="--",
-            lw=3,
-        )
-        ax.add_patch(rect)
-    return
+        # Add bounding box to the current axis
+        if tp is not None and ch == chs_to_plot[0]:
+            yrange = sub_ax.get_ylim()[1] - sub_ax.get_ylim()[0]
+            rect = Rectangle(
+                (
+                    tp - time_window_len / 2,
+                    sub_ax.get_ylim()[0] + 0.025 * yrange,
+                ),
+                time_window_len,
+                0.975 * yrange,
+                ec="black",
+                fc="gray",
+                alpha=0.2,
+                ls="--",
+                lw=2,
+            )
+            sub_ax.add_patch(rect)
+
+        axes.append(sub_ax)
+
+    # Label the x-axis only for the last subplot
+    for sub_ax in axes[:-1]:
+        sub_ax.set_xticklabels(
+            []
+        )  # Remove x-axis labels for all but the last subplot
+    axes[-1].set_xlabel("Time (s)")
+
+    return axes
 
 
 def plot_multitaper(
@@ -174,6 +210,7 @@ def plot_sparam_psd(
     fmax=params.FMAX,
     plot_freq_range=params.PLOT_FREQ_RANGE,
     alpha_band=params.ALPHA_BAND,
+    params_to_plot=params.PARAMS_TO_PLOT,
 ):
     """Plot spectral parameterization."""
     # Compute spectral parameterization
@@ -198,35 +235,52 @@ def plot_sparam_psd(
         10**fm._ap_fit,
         freq_range=plot_freq_range,
         ax=ax,
-        c="blue",
+        c=params_to_plot["exponent"]["color"],
         ls="--",
     )
 
-    # Plot alpha band
-    ax.axvline(alpha_band[0], color="purple", linestyle="--", alpha=0.5)
-    ax.axvline(alpha_band[1], color="purple", linestyle="--", alpha=0.5)
-
-    # Plot alpha AUC measures
+    # Plot AUC measure for band
+    y_min, y_max = ax.get_ylim()
     ax.fill_between(
         freqs[low_freq_idx : high_freq_idx + 1],
         10 ** fm._ap_fit[low_freq_idx : high_freq_idx + 1],
         y2=powers[low_freq_idx : high_freq_idx + 1],
-        color="darkorange",
-        alpha=0.2,
-        label="Linear Oscillatory Alpha AUC",
+        color=params_to_plot["linOscAUC"]["color"],
+        alpha=0.8,
+        label=params_to_plot["linOscAUC"]["name"],
     )
     ax.fill_between(
         freqs[low_freq_idx : high_freq_idx + 1],
-        np.zeros(high_freq_idx - low_freq_idx + 1),
-        y2=powers[low_freq_idx : high_freq_idx + 1],
+        0,
         hatch="/",
-        facecolor="w",
-        edgecolor="darkorange",
-        alpha=0.2,
-        label="Linear Total Alpha AUC",
+        y2=powers[low_freq_idx : high_freq_idx + 1],
+        color=params_to_plot["total_power"]["color"],
+        alpha=0.5,
+        label=params_to_plot["total_power"]["name"],
+    )
+
+    # Plot greek character
+    ax.text(
+        (freqs[low_freq_idx] + freqs[high_freq_idx]) / 2,
+        0.9 * y_max,
+        rf'$\{params_to_plot["linOscAUC"]["name"].split()[0].lower()}$',
+        fontsize=24,
+        color=params_to_plot["linOscAUC"]["color"],
+        va="top",
+        ha="center",
+    )
+
+    # Plot bands
+    ax.fill_betweenx(
+        [0, y_max],
+        freqs[low_freq_idx],
+        freqs[high_freq_idx],
+        facecolor=params_to_plot["total_power"]["color"],
+        alpha=0.1,
     )
 
     # Plot aesthetics
+    ax.set_ylim([0, y_max])
     ax.grid(False)
     sns.despine(ax=ax)
     ax.legend(loc="upper right")
@@ -241,21 +295,20 @@ def plot_sparam_params(
     ch=params.CHANNELS_TO_PLOT[0],
     params_to_plot=params.PARAMS_TO_PLOT,
 ):
-    """"""
-    # Load spectral parameterization data
-    for param in params_to_plot:
+    """Plot spectral parameters across time."""
+    for param_key, param in params_to_plot.items():
         # Load parameter data
         epochs, times, param_data = load_param_data(
-            subj_id, param["param"], param["dir"]
+            subj_id, param_key, param["dir"]
         )
 
-        # Select data from just desired channel
+        # Select data from the desired channel
         ch_data = param_data
         if ch is not None:
             ch_idx = epochs.ch_names.index(ch)
             ch_data = param_data[:, ch_idx, :]
 
-        # Select data from just desired trial
+        # Select data for the desired trial
         trial_data = ch_data
         if trial_num is not None:
             trial_data = ch_data[trial_num, :]
@@ -263,7 +316,7 @@ def plot_sparam_params(
         # Z-score data
         trial_data = (trial_data - np.mean(trial_data)) / np.std(trial_data)
 
-        # Plot parameter data\
+        # Plot parameter data
         ax.plot(times, trial_data, label=param["name"], color=param["color"])
 
     # Mark time point of interest if provided
@@ -286,15 +339,14 @@ def plot_sparam_topomaps(
     trial_num=0,
     params_to_plot=params.PARAMS_TO_PLOT,
 ):
-    """"""
+    """Plot topomaps of spectral parameters at a given time point."""
     # Make gridspec
     gs = big_gs.subgridspec(len(params_to_plot), 1)
 
-    # Load spectral parameterization data
-    for i, param in enumerate(params_to_plot):
+    for i, (param_key, param) in enumerate(params_to_plot.items()):
         # Load parameter data
         epochs, times, param_data = load_param_data(
-            subj_id, param["param"], param["dir"]
+            subj_id, param_key, param["dir"]
         )
 
         # Set montage
@@ -302,12 +354,12 @@ def plot_sparam_topomaps(
         eeg_chs = ["eeg" in ch_type for ch_type in epochs.get_channel_types()]
         param_data = param_data[:, eeg_chs, :]
 
-        # Select data from just desired trial
+        # Select data from the desired trial
         trial_data = param_data
         if trial_num is not None:
             trial_data = param_data[trial_num, :]
 
-        # Select data from just desired time point
+        # Select data from the desired time point
         tp_idx = np.argmin(np.abs(times - tp))
         tp_data = trial_data[:, tp_idx]
 
@@ -361,8 +413,8 @@ def add_letter_labels(axes):
 
 def plot_analysis_pipeline(
     epochs_dir=params.EPOCHS_DIR,
-    subj_id="CS_0",
-    trial_num=0,
+    subj_id="CS_1",
+    trial_num=20,
     tp=0.5,
     fig_dir=params.FIG_DIR,
 ):
@@ -375,9 +427,10 @@ def plot_analysis_pipeline(
     fig = plt.figure(figsize=(18, 12))
     gs = fig.add_gridspec(2, 6, figure=fig)
 
-    # Plot epochs
-    ax_epochs = fig.add_subplot(gs[0, :3])
-    plot_epochs(epochs, ax=ax_epochs, tp=tp)
+    # Plot epochs directly using the grid space
+    axes_epochs = plot_epochs(
+        epochs.copy(), gs[0, :3], tp=tp, trial_num=trial_num
+    )
 
     # Plot multitaper decomposition
     ax_multitaper = fig.add_subplot(gs[0, 3:])
@@ -402,7 +455,12 @@ def plot_analysis_pipeline(
     plot_sparam_topomaps(subj_id, fig, gs_topomaps, trial_num=trial_num, tp=tp)
 
     # Add letter labels
-    axes = [ax_epochs, ax_multitaper, ax_sparam, ax_sparam_params, ax_topomaps]
+    axes = [axes_epochs[0]] + [  # First subplot in plot_epochs
+        ax_multitaper,
+        ax_sparam,
+        ax_sparam_params,
+        ax_topomaps,
+    ]
     add_letter_labels(axes)
 
     # Save figure
@@ -412,6 +470,6 @@ def plot_analysis_pipeline(
 
 
 if __name__ == "__main__":
-    # Plot analysis pipeline
+    # Plot analysis pipeline for the first 100 trials
     plt.style.use(params.PLOT_SETTINGS)
     plot_analysis_pipeline()
