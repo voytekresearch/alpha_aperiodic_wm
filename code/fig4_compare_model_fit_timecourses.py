@@ -39,7 +39,8 @@ def compare_model_fits_across_windows(
     task_timings=params.TASK_TIMINGS,
     fig_dir=params.FIG_DIR,
 ):
-    """Plot model fits averaged over specified time windows with statistical annotations."""
+    """Plot model fits averaged over specified time windows with statistical
+    annotations."""
 
     # Iterate over parameters and create subplots
     _, axes = plt.subplots(
@@ -48,6 +49,8 @@ def compare_model_fits_across_windows(
     if len(model_fits) == 1:  # Handle single subplot case
         axes = [axes]
 
+    # Iterate over parameters and process model fits
+    model_fits_all_params = []
     for ax, (param_name, model_fits_one_param), (param_name2, details) in zip(
         axes, model_fits.items(), params_to_plot.items()
     ):
@@ -162,13 +165,15 @@ def compare_model_fits_across_windows(
         )
         annotator.apply_and_annotate()
 
+        # Append to list of DataFrames for all parameters
+        model_fits_all_params.append(model_fits_big_df)
     plt.tight_layout()
 
     # Save the figure if needed
     if save_fname:
         os.makedirs(fig_dir, exist_ok=True)
         plt.savefig(f"{fig_dir}/{save_fname}", bbox_inches="tight", dpi=300)
-    return
+    return pd.concat(model_fits_all_params).reset_index(drop=True)
 
 
 if __name__ == "__main__":
@@ -180,7 +185,7 @@ if __name__ == "__main__":
         sp_params=["total_power", "linOscAUC", "exponent"],
         verbose=False,
     )
-    compare_model_fits_across_windows(
+    model_fits_df = compare_model_fits_across_windows(
         ctf_slopes,
         t_arrays,
         model_output_name="CTF slope",
