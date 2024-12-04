@@ -180,6 +180,7 @@ def plot_model_fit_time_courses(
     subjects_by_task=params.SUBJECTS_BY_TASK,
     fig_dir=params.FIG_DIR,
     task_timings=params.TASK_TIMINGS,
+    save_fname="fig3_compare_model_fits_across_tasks.png",
 ):
     """Plot model fit time courses for total power and parameters from spectral
     parameterization.
@@ -266,7 +267,7 @@ def plot_model_fit_time_courses(
 
     # Save figure
     os.makedirs(fig_dir, exist_ok=True)
-    model_fits_fname = f"{fig_dir}/fig3_compare_model_fits_across_tasks.png"
+    model_fits_fname = f"{fig_dir}/{save_fname}"
     if len(name) > 0:
         model_fits_fname = model_fits_fname.replace(".", f"_{name}.")
     plt.savefig(model_fits_fname, dpi=300)
