@@ -80,7 +80,6 @@ def compare_model_fits_across_windows(
             # Define task-specific time windows
             current_task_timings = task_timings[task_num]
             time_windows = {
-                "baseline": (None, 0),
                 "encoding": (0, current_task_timings[0]),
                 "delay": current_task_timings,
             }
@@ -119,8 +118,8 @@ def compare_model_fits_across_windows(
 
         # Generate palette for time windows
         base_color = details["color"]
-        time_windows_list = ["baseline", "encoding", "delay"]
-        brightness_factors = [0.6, 1.0, 1.4]  # Darker, original, lighter
+        time_windows_list = ["encoding", "delay"]
+        brightness_factors = [0.8, 1.2]  # Darker, original, lighter
         palette = {
             window: adjust_brightness(base_color, factor)
             for window, factor in zip(time_windows_list, brightness_factors)
@@ -141,15 +140,10 @@ def compare_model_fits_across_windows(
         sns.despine(ax=ax)
 
         # Statistical annotations: Compare "baseline" to other time windows globally
-        pairs_set1 = [
-            ((task, "baseline"), (task, "encoding"))
+        pairs = [
+            ((task, "encoding"), (task, "delay"))
             for task in model_fits_big_df["Task"].unique()
         ]
-        pairs_set2 = [
-            ((task, "baseline"), (task, "delay"))
-            for task in model_fits_big_df["Task"].unique()
-        ]
-        pairs = pairs_set1 + pairs_set2
         annotator = Annotator(
             ax=ax,
             pairs=pairs,
