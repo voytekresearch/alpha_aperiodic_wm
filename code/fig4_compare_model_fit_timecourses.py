@@ -4,11 +4,26 @@ import os
 import pandas as pd
 import seaborn as sns
 from statannotations.Annotator import Annotator
+from scipy.stats import ttest_1samp
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from train_and_test_model import fit_model_desired_params
 from fig3_compare_model_fits_across_tasks import zscore_model_fits
 import params
+
+
+def get_star_annotation(p):
+    """Map p-values to significance markers."""
+    if p < 0.0001:
+        return "****"
+    if p < 0.001:
+        return "***"
+    elif p < 0.01:
+        return "**"
+    elif p < 0.05:
+        return "*"
+    else:
+        return "ns"
 
 
 def adjust_brightness(hex_color, factor):
@@ -139,7 +154,7 @@ def compare_model_fits_across_windows(
         ax.legend(title="Time Window", loc="upper left")
         sns.despine(ax=ax)
 
-        # Statistical annotations: Compare "baseline" to other time windows globally
+        # Compare encoding and delay time windows
         pairs = [
             ((task, "encoding"), (task, "delay"))
             for task in model_fits_big_df["Task"].unique()
@@ -158,6 +173,32 @@ def compare_model_fits_across_windows(
             comparisons_correction="BH",
         )
         annotator.apply_and_annotate()
+
+        # Perform one-sample t-tests against 0 and plot
+        for task_num in model_fits_big_df["Task"].unique():
+            for window in time_windows_list:
+                window_data = model_fits_big_df[
+                    (model_fits_big_df["Task"] == task_num)
+                    & (model_fits_big_df["Time Window"] == window)
+                ]
+                _, p_val = ttest_1samp(window_data[new_model_output_name], 0)
+
+                # Add p-value annotation
+                x_pos = (
+                    float(task_num) - 0.2
+                    if window == "encoding"
+                    else float(task_num) + 0.2
+                ) - 1
+                y_pos = window_data[new_model_output_name].max() + 0.15
+                significance_label = get_star_annotation(p_val)
+                ax.text(
+                    x_pos,
+                    y_pos,
+                    significance_label,
+                    ha="center",
+                    va="bottom",
+                    fontsize=12,
+                )
 
         # Append to list of DataFrames for all parameters
         model_fits_all_params.append(model_fits_big_df)
