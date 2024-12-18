@@ -221,7 +221,71 @@ def compare_model_fits_across_windows(
     if save_fname:
         os.makedirs(fig_dir, exist_ok=True)
         plt.savefig(f"{fig_dir}/{save_fname}", bbox_inches="tight", dpi=300)
-    return pd.concat(model_fits_all_params).reset_index(drop=True)
+    return (
+        pd.concat(model_fits_all_params).reset_index(drop=True),
+        new_model_output_name,
+    )
+
+
+def compare_model_fits_across_params(
+    model_fits_all_params,
+    model_output_name,
+    params_to_compare=(("Alpha total power", "Alpha oscillatory power"),),
+    save_fname=None,
+    fig_dir=params.FIG_DIR,
+    time_window="delay",
+):
+    """"""
+    # Filter for the desired time window
+    model_fits_time_window = model_fits_all_params[
+        model_fits_all_params["Time Window"] == time_window
+    ]
+
+    # Create subplots
+    _, axes = plt.subplots(
+        1,
+        len(params_to_compare),
+        figsize=(8 * len(params_to_compare), 6),
+        squeeze=False,
+    )
+    axes = axes[0]  # Unpack axes for easier iteration
+
+    # Iterate over parameter pairs and create plots
+    for i, param_pair in enumerate(params_to_compare):
+        # Filter rows where Parameter matches the pair
+        model_fits_pair = model_fits_time_window[
+            model_fits_time_window["Parameter"].isin(param_pair)
+        ]
+
+        # Pivot to get x and y columns based on param_pair
+        pivot_data = model_fits_pair.pivot(
+            index=["subject", "Task"],  # Unique identifier for each point
+            columns="Parameter",
+            values=output_name,
+        ).reset_index()
+
+        # Plot using seaborn
+        sns.scatterplot(
+            data=pivot_data,
+            x=param_pair[0],
+            y=param_pair[1],
+            hue="Task",
+            ax=axes[i],
+            palette="Spectral",
+        )
+        axes[i].set_xlabel(param_pair[0])
+        axes[i].set_ylabel(param_pair[1])
+        sns.despine(ax=axes[i])
+
+    # Plot identity line for comparison
+    for ax in axes:
+        ax.plot(ax.get_xlim(), ax.get_ylim(), ls="--", c=".3")
+
+    # Adjust layout and optionally save the figure
+    plt.tight_layout()
+    if save_fname and fig_dir:
+        plt.savefig(f"{fig_dir}/{save_fname}", bbox_inches="tight", dpi=300)
+    return
 
 
 if __name__ == "__main__":
@@ -233,9 +297,14 @@ if __name__ == "__main__":
         sp_params=["total_power", "linOscAUC", "exponent"],
         verbose=False,
     )
-    model_fits_df = compare_model_fits_across_windows(
+    model_fits_df, output_name = compare_model_fits_across_windows(
         ctf_slopes,
         t_arrays,
         model_output_name="CTF slope",
         save_fname="fig4_compare_model_fit_timecourses.png",
+    )
+    compare_model_fits_across_params(
+        model_fits_df,
+        output_name,
+        save_fname="fig4_compare_model_fit_scatter.png",
     )
