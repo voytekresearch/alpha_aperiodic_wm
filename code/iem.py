@@ -123,6 +123,7 @@ class IEM:
 
         self.design_matrix = None
         self.weights = None
+        self.inv_weights = None
         self.estimated_ctfs = None
         self.mean_channel_offset = None
         self.ctf_slope = None
@@ -173,7 +174,8 @@ class IEM:
             Array of testing labels to use in IEM.
         """
         inv = np.linalg.inv(self.weights.T @ self.weights)
-        estimated_crfs = inv @ self.weights.T @ test_data
+        self.inv_weights = inv @ self.weights.T
+        estimated_crfs = self.inv_weights @ test_data
         test_labels_idx = rankdata(test_labels, method="dense") - 1
         self.estimated_ctfs = np.array(
             [
@@ -243,7 +245,7 @@ class IEM:
             np.arange(1, len(dist_from_tuned_avg) + 1).reshape(-1, 1),
             np.mean(ctf_avg_across_equidist_chs, axis=1),
         )
-        self.ctf_slope = lin_model.coef_[0]
+        self.ctf_slope = -lin_model.coef_[0]
 
     def plot_basis_set(self):
         """Plot basis set for IEM model."""
