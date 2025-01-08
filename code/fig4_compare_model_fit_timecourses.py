@@ -9,6 +9,7 @@ from statsmodels.stats.multitest import multipletests
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from train_and_test_model import fit_model_desired_params
+from fig2_analysis_pipeline import add_letter_labels
 from fig3_compare_model_fits_across_tasks import zscore_model_fits
 import params
 
@@ -54,16 +55,18 @@ def compare_model_fits_across_windows(
     save_fname=None,
     task_timings=params.TASK_TIMINGS,
     fig_dir=params.FIG_DIR,
+    axes=None,
 ):
     """Plot model fits averaged over specified time windows with statistical
     annotations."""
 
     # Iterate over parameters and create subplots
-    _, axes = plt.subplots(
-        1, len(model_fits), figsize=(8 * len(model_fits), 6), sharey=True
-    )
-    if len(model_fits) == 1:  # Handle single subplot case
-        axes = [axes]
+    if axes is None:
+        _, axes = plt.subplots(
+            1, len(model_fits), figsize=(8 * len(model_fits), 6), sharey=True
+        )
+        if len(model_fits) == 1:  # Handle single subplot case
+            axes = [axes]
 
     # Iterate over parameters and process model fits
     model_fits_all_params = []
@@ -152,7 +155,7 @@ def compare_model_fits_across_windows(
             ax=ax,
         )
         ax.set_title(details["name"], fontsize=16)
-        ax.legend(title="Time Window", loc="upper left")
+        ax.legend(title="Time Window", loc="lower left")
         sns.despine(ax=ax)
 
         # Compare encoding and delay time windows
@@ -193,7 +196,7 @@ def compare_model_fits_across_windows(
                     if window == "encoding"
                     else float(task_num) + 0.2
                 ) - 1
-                y_pos = window_data[new_model_output_name].max() + 0.15
+                y_pos = window_data[new_model_output_name].max() + 0.05
                 annotation_positions.append((x_pos, y_pos))
 
         # Apply multiple comparisons correction
@@ -204,6 +207,9 @@ def compare_model_fits_across_windows(
             annotation_positions, adjusted_p_values
         ):
             significance_label = get_star_annotation(adj_p_val)
+            if significance_label == "ns":
+                y_pos += 0.2
+            print(significance_label, y_pos)
             ax.text(
                 x_pos,
                 y_pos,
@@ -234,6 +240,7 @@ def compare_model_fits_across_params(
     save_fname=None,
     fig_dir=params.FIG_DIR,
     time_window="delay",
+    axes=None,
 ):
     """"""
     # Filter for the desired time window
@@ -242,13 +249,15 @@ def compare_model_fits_across_params(
     ]
 
     # Create subplots
-    _, axes = plt.subplots(
-        1,
-        len(params_to_compare),
-        figsize=(8 * len(params_to_compare), 6),
-        squeeze=False,
-    )
-    axes = axes[0]  # Unpack axes for easier iteration
+    if axes is None:
+        _, axes = plt.subplots(
+            1,
+            len(params_to_compare),
+            figsize=(8 * len(params_to_compare), 6),
+            squeeze=False,
+        )
+    if len(params_to_compare) == 1:  # Handle single subplot case
+        axes = [axes]
 
     # Iterate over parameter pairs and create plots
     for i, param_pair in enumerate(params_to_compare):
@@ -261,7 +270,7 @@ def compare_model_fits_across_params(
         pivot_data = model_fits_pair.pivot(
             index=["subject", "Task"],  # Unique identifier for each point
             columns="Parameter",
-            values=output_name,
+            values=model_output_name,
         ).reset_index()
 
         # Plot using seaborn
@@ -285,6 +294,53 @@ def compare_model_fits_across_params(
     plt.tight_layout()
     if save_fname and fig_dir:
         plt.savefig(f"{fig_dir}/{save_fname}", bbox_inches="tight", dpi=300)
+
+
+def compare_model_fit_timecourses(fig_dir=params.FIG_DIR):
+    """"""
+    # Plot model fits across time windows
+    ctf_slopes, t_arrays = fit_model_desired_params(
+        sp_params=["total_power", "linOscAUC", "exponent"],
+        verbose=False,
+    )
+
+    # Make gridspec
+    rows = 2
+    cols = (len(ctf_slopes) + 1) // 2
+    fig = plt.figure(figsize=(7 * cols, 5 * rows))
+    gs = fig.add_gridspec(rows, cols)
+
+    # Plot model fits across time windows
+    axes_windows = [
+        fig.add_subplot(gs[row, col])
+        for idx in range(len(ctf_slopes))
+        for row, col in [divmod(idx, cols)]
+    ]
+    model_fits_df, output_name = compare_model_fits_across_windows(
+        ctf_slopes,
+        t_arrays,
+        model_output_name="CTF slope",
+        axes=axes_windows,
+    )
+
+    # Plot model fits across parameters
+    ax_params = fig.add_subplot(gs[divmod(len(ctf_slopes), cols)])
+    compare_model_fits_across_params(
+        model_fits_df,
+        output_name,
+        axes=ax_params,
+    )
+
+    # Add letter labels
+    axes_params = (
+        [ax_params] if isinstance(ax_params, plt.Axes) else list(ax_params)
+    )
+    add_letter_labels(axes_windows + axes_params)
+
+    # Save figure
+    os.makedirs(fig_dir, exist_ok=True)
+    fig_fname = f"{fig_dir}/fig4_compare_model_fit_timecourses_big.png"
+    plt.savefig(fig_fname, bbox_inches="tight", dpi=300)
     return
 
 
@@ -292,19 +348,8 @@ if __name__ == "__main__":
     # Set seed
     np.random.seed(params.SEED)
 
-    # Plot model fits across time windows
-    ctf_slopes, t_arrays = fit_model_desired_params(
-        sp_params=["total_power", "linOscAUC", "exponent"],
-        verbose=False,
-    )
-    model_fits_df, output_name = compare_model_fits_across_windows(
-        ctf_slopes,
-        t_arrays,
-        model_output_name="CTF slope",
-        save_fname="fig4_compare_model_fit_timecourses.png",
-    )
-    compare_model_fits_across_params(
-        model_fits_df,
-        output_name,
-        save_fname="fig4_compare_model_fit_scatter.png",
-    )
+    # Set plot style
+    plt.style.use(params.PLOT_SETTINGS)
+
+    # Compare model fits across time windows and parameters
+    compare_model_fit_timecourses()
