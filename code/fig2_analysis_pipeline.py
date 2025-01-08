@@ -2,12 +2,9 @@
 import fooof
 from fooof.plts import plot_spectra
 import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle
 import mne
 import seaborn as sns
 import numpy as np
-import os
-import pandas as pd
 import string
 import params
 from train_and_test_model import load_param_data
@@ -56,16 +53,6 @@ def set_montage(
     # Set montage
     epochs.set_montage(montage, on_missing="ignore")
     return epochs
-
-
-def plot_sensors(epochs, ax=None):
-    """Plot sensors for given epoched data."""
-    # Set montage
-    epochs = set_montage(epochs)
-
-    # Plot sensors
-    epochs.plot_sensors(show_names=True, show=False, axes=ax)
-    return
 
 
 def plot_epochs(
