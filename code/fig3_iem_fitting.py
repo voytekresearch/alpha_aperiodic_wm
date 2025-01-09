@@ -1,200 +1,300 @@
 # Import necessary modules
 import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
 import seaborn as sns
 import numpy as np
 import colorcet as cc
+import mne
+from mne.channels.layout import _find_topomap_coords
+import os
+from iem import IEM
 import params
+from train_and_test_model import (
+    load_param_data,
+    equalize_param_data_across_trial_blocks,
+)
+from fig2_analysis_pipeline import set_montage
 
 
-def simulate_channel_response(
-    colors,
+def fit_iem_single_case(
+    subj="CS_1",
+    param="linOscAUC",
+    tp=0.5,
+    param_dir=params.SPARAM_DIR,
+):
+    """
+    Process a single block, single time point for one subject and parameter.
+
+    Parameters
+    ----------
+    subj : str
+        Subject ID.
+    param : str
+        Parameter to decode (e.g., 'alpha_power').
+    param_dir : str
+        Path to directory containing parameterized data.
+    """
+    # Load parameterized data
+    epochs, times, param_data = load_param_data(
+        subj,
+        param,
+        param_dir,
+    )
+
+    # Average parameterized data within trial blocks
+    param_arr, _ = equalize_param_data_across_trial_blocks(
+        epochs,
+        times,
+        param_data,
+        average=True,
+        distractors=False,
+    )
+
+    # Split into training and testing data
+    train_data = np.delete(param_arr, 0, axis=1).reshape(
+        param_arr.shape[0], -1, param_arr.shape[-1]
+    )
+    test_data = param_arr[:, 0, :, :]
+
+    # Create labels for training and testing
+    n_blocks = param_arr.shape[1]
+    base_labels = IEM().channel_centers
+    train_labels = np.tile(base_labels, n_blocks - 1)
+    test_labels = base_labels
+
+    # Select training and testing data from time point of interest
+    tp_idx = np.argmin(np.abs(times - tp))
+    train_data = train_data[:, :, tp_idx]
+    test_data = test_data[:, :, tp_idx]
+
+    # Train and test the IEM
+    iem = IEM()
+    iem.train_model(train_data, train_labels)
+    iem.estimate_ctf(test_data, test_labels)
+    iem.compute_ctf_slope()
+    return iem, epochs
+
+
+def plot_channel_response(
+    amps,
     ax=None,
+    colors=None,
     fig_dir=params.FIG_DIR,
-    save_fname="simulated_iem_channel.png",
+    save_fname="channel_response.png",
 ):
     # Make figure
     if ax is None:
         fig = plt.figure(figsize=(4, 4))
         ax = fig.add_axes([0.1, 0.1, 0.8, 0.8], polar=True)
 
-    # Define bins and amplitudes
-    bins = np.linspace(np.pi / 2, -3 / 2 * np.pi, 9)[:-1]
-    amps = [0.5, 1, 0.5, 0.1, 0.1, 0.1, 0.1, 0.1]
+    # Get colors
+    if colors is None:
+        colors = [
+            cc.cyclic_isoluminant[
+                int(i * len(cc.cyclic_isoluminant) / len(amps))
+            ]
+            for i in range(len(amps))
+        ]
 
     # Make rose plot
-    for bin, amp, c in zip(bins, amps, colors):
-        ax.bar(bin, amp, width=bins[1] - bins[0], color=c, edgecolor="k")
+    channel_centers = np.radians(IEM().channel_centers)
+    bin_width = np.diff(channel_centers)[0]
+    for bin, amp, c in zip(channel_centers, amps, colors):
+        ax.bar(bin, amp, width=bin_width, color=c, edgecolor="k")
     ax.axis("off")
     if save_fname is not None:
         plt.savefig(f"{fig_dir}/{save_fname}", dpi=300, bbox_inches="tight")
     return ax
 
 
+def plot_sensors(epochs, ax=None):
+    """Plot sensors for given epoched data."""
+
+    return
+
+
 def plot_channel_weights(
-    colors,
+    epochs,
+    weights,
+    fig=None,
+    ax=None,
+    colors=None,
     fig_dir=params.FIG_DIR,
     save_fname="iem_channel_weights.png",
 ):
-    # Make figure
-    n_rows, n_columns = 4, 3
-    fig = plt.figure(constrained_layout=True, figsize=(6, 6))
-    gs = fig.add_gridspec(n_rows, n_columns)
+    # Make sure both fig and ax are either None or not None
+    assert bool(fig) == bool(ax)
 
-    # Define bins and channel weights
-    bins = np.linspace(np.pi / 2, -3 / 2 * np.pi, len(colors) + 1)[:-1]
-    weights = np.random.rand(n_rows * n_columns, len(colors))
+    # Get colors
+    n_sensors, n_channels = weights.shape
+    if colors is None:
+        colors = [
+            cc.cyclic_isoluminant[
+                int(i * len(cc.cyclic_isoluminant) / n_channels)
+            ]
+            for i in range(n_channels)
+        ]
 
-    # Make rose plot for each set of weights
-    axes = []
-    for i in range(n_rows * n_columns):
-        ax = fig.add_subplot(gs[i], polar=True)
-        for bin, weight, c in zip(bins, weights[i, :], colors):
-            ax.bar(
-                bin,
-                weight,
-                width=bins[1] - bins[0],
-                color=c,
-                bottom=0.8,
-                edgecolor="k",
-            )
-        ax.axis("off")
-        axes.append(ax)
-    if save_fname is not None:
-        plt.savefig(f"{fig_dir}/{save_fname}", dpi=300, bbox_inches="tight")
-    return weights, axes
+    # Main scatter plot axis
+    fig, main_ax = plt.subplots(figsize=(8, 8))
 
+    # Set montage
+    epochs = set_montage(epochs)
 
-def plot_inverted_channel_weights(
-    weights,
-    colors,
-    fig_dir=params.FIG_DIR,
-    save_fname="iem_channel_inverse.png",
-):
-    # Make figure
-    n_rows, n_columns = 4, 3
-    fig = plt.figure(constrained_layout=True, figsize=(6, 6))
-    gs = fig.add_gridspec(n_rows, n_columns)
-
-    # Define bins and calculate inverse for channel weights
-    bins = np.linspace(np.pi / 2, -3 / 2 * np.pi, len(colors) + 1)[:-1]
-    weights_inv = np.linalg.inv(weights.T @ weights) @ weights.T
-    weights_inv = (weights_inv - np.min(weights_inv)) / (
-        np.max(weights_inv) - np.min(weights_inv)
+    # Plot sensors
+    epochs.plot_sensors(
+        show_names=False,
+        show=False,
+        axes=main_ax,
+        sphere=(0.0, 0.02, 0.0, 0.095),
     )
 
-    # Make rose plot for each set of inverted weights
-    axes = []
-    for i in range(n_rows * n_columns):
-        ax = fig.add_subplot(gs[i], polar=True)
-        for bin, weight_inv, c in zip(bins, weights_inv[:, i], colors):
-            ax.bar(
+    # Prepare topomap plot to get the transformed positions
+    info = epochs.info
+    picks = mne.pick_types(info, meg=False, eeg=True, exclude="bads")
+    pos = _find_topomap_coords(
+        info, picks=picks, sphere=(0.0, 0.02, 0.0, 0.095)
+    )
+    bins = np.radians(IEM().channel_centers)
+
+    # Min-max normalize weights
+    weights = (weights - weights.min()) / (weights.max() - weights.min())
+
+    # Add rose plots at the specified positions
+    for (x, y), weight in zip(pos, weights):
+        # Create a polar inset at the specific position
+        inset_ax = fig.add_axes([0, 0, 0, 0], polar=True, label=f"{x},{y}")
+        inset_ax.set_anchor("C")  # Center the polar plot
+
+        # Plot the rose plot
+        for bin, w, c in zip(bins, weight, colors):
+            inset_ax.bar(
                 bin,
-                weight_inv,
+                w,
                 width=bins[1] - bins[0],
                 color=c,
-                bottom=0.8,
                 edgecolor="k",
             )
+        inset_ax.axis("off")  # Hide polar axes
+
+        # Transform position to the main axis coordinates
+        trans = main_ax.transData.transform((x, y))
+        trans_inv = fig.transFigure.inverted().transform(trans)
+
+        # Set the inset axis position
+        inset_ax.set_position(
+            [trans_inv[0] - 0.05, trans_inv[1] - 0.05, 0.1, 0.1]
+        )
+
+    if save_fname is not None:
+        plt.savefig(f"{fig_dir}/{save_fname}", dpi=300, bbox_inches="tight")
+
+    # Place the main axis within the given axis
+    if ax is not None:
+        temp_path = f"{fig_dir}/temp.png"
+        extent = main_ax.get_window_extent().transformed(
+            fig.dpi_scale_trans.inverted()
+        )
+        fig.savefig(temp_path, bbox_inches=extent)
+
+        # Clear ax2 and display the saved image
+        ax.clear()
+        image = mpimg.imread(temp_path)
+        ax.imshow(
+            image,
+            aspect="equal",
+            extent=main_ax.get_xlim() + main_ax.get_ylim(),
+        )
         ax.axis("off")
-        axes.append(ax)
-    if save_fname is not None:
-        plt.savefig(f"{fig_dir}/{save_fname}", dpi=300, bbox_inches="tight")
-    return axes
-
-
-def plot_channel_response(
-    colors,
-    ax=None,
-    fig_dir=params.FIG_DIR,
-    save_fname="predicted_channel_response.png",
-):
-    # Make figure
-    fig = plt.figure(figsize=(4, 4))
-    ax = fig.add_axes([0.1, 0.1, 0.8, 0.8], polar=True)
-
-    # Define bins and amplitudes
-    bins = np.linspace(np.pi / 2, -3 / 2 * np.pi, 9)[:-1]
-    amps = [0.021, 0.21, 0.11, 0.0, 0.05, 0.4, 0.8, 0.5]
-
-    # Make rose plot
-    for bin, amp, c in zip(bins, amps, colors):
-        ax.bar(bin, amp, width=bins[1] - bins[0], color=c, edgecolor="k")
-    ax.axis("off")
-    if save_fname is not None:
-        plt.savefig(f"{fig_dir}/{save_fname}", dpi=300, bbox_inches="tight")
-    return ax, amps
+        os.remove(temp_path)
+    return
 
 
 def plot_ctf_slope(
-    colors,
-    dist_from_tuned,
     amps,
+    ax=None,
+    colors=None,
     fig_dir=params.FIG_DIR,
     save_fname="ctf_slope_scatter.png",
 ):
+    # Get colors
+    if colors is None:
+        colors = [
+            cc.cyclic_isoluminant[
+                int(i * len(cc.cyclic_isoluminant) / len(amps))
+            ]
+            for i in range(len(amps))
+        ]
+
+    # Determine index of maximum amplitude
     idx = np.argmax(amps)
+
+    # Calculate distance from tuned
+    channel_centers = IEM().channel_centers
+    feat_space_range = IEM().feat_space_range
+    dist_from_tuned = np.min(
+        [channel_centers, np.abs(channel_centers - feat_space_range)], axis=0
+    )
     dist_from_tuned = np.roll(dist_from_tuned, idx)
 
-    # Plot CTF slope
-    fig = plt.figure(figsize=(4, 4))
+    # Create figure and axis
+    if ax is None:
+        _, ax = plt.subplots(figsize=(4, 4))
+
+    # Fit and plot linear regression line
     a, b = np.polyfit(-dist_from_tuned, amps, 1)
     x = np.linspace(np.min(-dist_from_tuned), np.max(-dist_from_tuned), 100)
-    plt.plot(x, a * x + b, color="k", ls="--")
-    plt.scatter(-dist_from_tuned, amps, c=colors)
-    plt.xlabel("Distance from tuned (degrees)", fontsize=14)
-    plt.ylabel("Activation", fontsize=14)
-    sns.despine()
+    ax.plot(x, a * x + b, color="k", ls="--")
+
+    # Scatter plot
+    ax.scatter(-dist_from_tuned, amps, c=colors)
+
+    # Labels and styling
+    ax.set_xlabel("Distance from tuned (degrees)", fontsize=14)
+    ax.set_ylabel("Activation", fontsize=14)
+    sns.despine(ax=ax)
+
+    # Save figure
     if save_fname is not None:
         plt.savefig(f"{fig_dir}/{save_fname}", dpi=300, bbox_inches="tight")
     return
 
 
 def make_iem_fitting_figure(
-    n_channels=params.IEM_N_CHANNELS,
-    feat_space_edges=params.IEM_FEAT_SPACE_EDGES,
-    basis_func=params.IEM_BASIS_FUNC,
+    fig_dir=params.FIG_DIR, save_fname="fig3_iem_fitting.png"
 ):
-    # Create basis set
-    feat_space_range = (np.diff(feat_space_edges)[0] + 1).astype(int)
-    theta = np.linspace(*feat_space_edges, feat_space_range)
-    channel_centers = np.linspace(
-        feat_space_edges[0],
-        feat_space_edges[-1] + 1,
-        n_channels + 1,
-    )[:-1].astype(int)
-    basis_set = np.array(
-        [
-            np.roll(
-                basis_func(theta),
-                channel_center - len(theta) // 2,
-            )
-            for channel_center in channel_centers
-        ]
-    )
-    dist_from_tuned = np.min(
-        [channel_centers, np.abs(channel_centers - feat_space_range)], axis=0
-    )
+    # Fit IEM model for single block
+    iem, epochs = fit_iem_single_case()
 
-    # Get colors
-    colors = [
-        cc.cyclic_isoluminant[int(i * len(cc.cyclic_isoluminant) / n_channels)]
-        for i in range(n_channels)
-    ]
+    # Make figure
+    fig = plt.figure(figsize=(24, 12))
+    gs = fig.add_gridspec(2, 5)
 
     # Plot channel response
-    simulate_channel_response(colors)
+    amps = iem.design_matrix[:, 0]
+    ax_sim_response = fig.add_subplot(gs[0, 1], polar=True)
+    plot_channel_response(amps, ax=ax_sim_response)
 
     # Plot channel weights
-    weights, _ = plot_channel_weights(colors)
+    ax_weights = fig.add_subplot(gs[0, 3])
+    plot_channel_weights(epochs, iem.weights, ax=ax_weights, fig=fig)
 
     # Plot inverted channel weights
-    plot_inverted_channel_weights(weights, colors)
+    ax_inv_weights = fig.add_subplot(gs[1, 2])
+    plot_channel_weights(epochs, iem.inv_weights.T, ax=ax_inv_weights, fig=fig)
 
     # Plot predicted channel response
-    _, amps = plot_channel_response(colors)
+    ax_ctf = fig.add_subplot(gs[1, 3], polar=True)
+    estimated_ctf = iem.estimated_ctfs[0, :]
+    plot_channel_response(estimated_ctf, ax=ax_ctf)
 
     # Plot CTF slope
-    plot_ctf_slope(colors, dist_from_tuned, amps)
+    ax_slope = fig.add_subplot(gs[1, -1])
+    plot_ctf_slope(estimated_ctf, ax=ax_slope)
+
+    # Save figure
+    if save_fname is not None:
+        fig.savefig(f"{fig_dir}/{save_fname}", dpi=300, bbox_inches="tight")
     return
 
 
