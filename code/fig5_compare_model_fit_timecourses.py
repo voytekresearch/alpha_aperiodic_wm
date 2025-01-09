@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from train_and_test_model import fit_model_desired_params
 from fig2_analysis_pipeline import add_letter_labels
-from fig3_compare_model_fits_across_tasks import zscore_model_fits
+from fig4_compare_model_fits_across_tasks import zscore_model_fits
 import params
 
 
