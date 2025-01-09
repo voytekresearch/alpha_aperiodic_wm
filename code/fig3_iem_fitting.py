@@ -72,7 +72,7 @@ def fit_iem_single_case(
     iem.train_model(train_data, train_labels)
     iem.estimate_ctf(test_data, test_labels)
     iem.compute_ctf_slope()
-    return iem, epochs
+    return iem, epochs, train_data, test_data
 
 
 def plot_channel_response(
@@ -107,9 +107,24 @@ def plot_channel_response(
     return ax
 
 
-def plot_sensors(epochs, ax=None):
-    """Plot sensors for given epoched data."""
+def plot_eeg(
+    epochs,
+    data,
+    ax=None,
+    fig_dir=params.FIG_DIR,
+    save_fname="eeg.png",
+):
+    # Make figure
+    if ax is None:
+        _, ax = plt.subplots(figsize=(8, 4))
 
+    # Plot EEG
+    epochs = set_montage(epochs)
+    mne.viz.plot_topomap(data, epochs.info, axes=ax, show=False)
+
+    # Save figure
+    if save_fname is not None:
+        plt.savefig(f"{fig_dir}/{save_fname}", dpi=300, bbox_inches="tight")
     return
 
 
@@ -261,31 +276,44 @@ def plot_ctf_slope(
 
 
 def make_iem_fitting_figure(
-    fig_dir=params.FIG_DIR, save_fname="fig3_iem_fitting.png"
+    fig_dir=params.FIG_DIR,
+    save_fname="fig3_iem_fitting.png",
+    iem_channel_train=0,
+    iem_channel_test=1,
 ):
     # Fit IEM model for single block
-    iem, epochs = fit_iem_single_case()
+    iem, epochs, train_data, test_data = fit_iem_single_case()
 
     # Make figure
     fig = plt.figure(figsize=(24, 12))
     gs = fig.add_gridspec(2, 5)
 
     # Plot channel response
-    amps = iem.design_matrix[:, 0]
+    amps = iem.design_matrix[:, iem_channel_train]
     ax_sim_response = fig.add_subplot(gs[0, 1], polar=True)
     plot_channel_response(amps, ax=ax_sim_response)
+
+    # Plot EEG for single training block
+    ax_eeg_train = fig.add_subplot(gs[0, 2])
+    eeg_train = np.mean(train_data[:, iem_channel_train :: len(amps)], axis=1)
+    plot_eeg(epochs, eeg_train, ax=ax_eeg_train)
 
     # Plot channel weights
     ax_weights = fig.add_subplot(gs[0, 3])
     plot_channel_weights(epochs, iem.weights, ax=ax_weights, fig=fig)
 
     # Plot inverted channel weights
-    ax_inv_weights = fig.add_subplot(gs[1, 2])
+    ax_inv_weights = fig.add_subplot(gs[1, 1])
     plot_channel_weights(epochs, iem.inv_weights.T, ax=ax_inv_weights, fig=fig)
+
+    # Plot EEG for single testing block
+    ax_eeg_test = fig.add_subplot(gs[1, 2])
+    eeg_test = test_data[:, iem_channel_test]
+    plot_eeg(epochs, eeg_test, ax=ax_eeg_test)
 
     # Plot predicted channel response
     ax_ctf = fig.add_subplot(gs[1, 3], polar=True)
-    estimated_ctf = iem.estimated_ctfs[0, :]
+    estimated_ctf = iem.estimated_ctfs[iem_channel_test, :]
     plot_channel_response(estimated_ctf, ax=ax_ctf)
 
     # Plot CTF slope
@@ -299,4 +327,8 @@ def make_iem_fitting_figure(
 
 
 if __name__ == "__main__":
+    # Set random seed
+    np.random.seed(params.SEED)
+
+    # Make figure
     make_iem_fitting_figure()
