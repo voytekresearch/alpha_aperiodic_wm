@@ -136,6 +136,7 @@ def plot_channel_response(
     colors=None,
     fig_dir=params.FIG_DIR,
     save_fname="channel_response.png",
+    channel_idx=None,
 ):
     # Make figure
     if ax is None:
@@ -154,8 +155,19 @@ def plot_channel_response(
     # Make rose plot
     channel_centers = np.radians(IEM().channel_centers)
     bin_width = np.diff(channel_centers)[0]
-    for bin, amp, c in zip(channel_centers, amps, colors):
-        ax.bar(bin, amp, width=bin_width, color=c, edgecolor="k")
+    for i, (bin, amp, c) in enumerate(zip(channel_centers, amps, colors)):
+        alpha, linewidth = 0.5, 1
+        if channel_idx is not None and i == channel_idx:
+            alpha, linewidth = 1, 2
+        ax.bar(
+            bin,
+            amp,
+            width=bin_width,
+            color=c,
+            edgecolor="k",
+            alpha=alpha,
+            linewidth=linewidth,
+        )
     ax.axis("off")
     if save_fname is not None:
         plt.savefig(f"{fig_dir}/{save_fname}", dpi=300, bbox_inches="tight")
@@ -189,6 +201,7 @@ def plot_channel_weights(
     fig=None,
     ax=None,
     colors=None,
+    channel_idx=None,
     fig_dir=params.FIG_DIR,
     save_fname="iem_channel_weights.png",
 ):
@@ -237,13 +250,18 @@ def plot_channel_weights(
         inset_ax.set_anchor("C")  # Center the polar plot
 
         # Plot the rose plot
-        for bin, w, c in zip(bins, weight, colors):
+        for i, (bin, w, c) in enumerate(zip(bins, weight, colors)):
+            alpha, linewidth = 0.5, 1
+            if channel_idx is not None and i == channel_idx:
+                alpha, linewidth = 1, 2
             inset_ax.bar(
                 bin,
                 w,
                 width=bins[1] - bins[0],
                 color=c,
                 edgecolor="k",
+                alpha=alpha,
+                linewidth=linewidth,
             )
         inset_ax.axis("off")  # Hide polar axes
 
@@ -352,7 +370,9 @@ def make_iem_fitting_figure(
     # Plot channel response
     amps = iem.design_matrix[:, iem_channel_train]
     ax_sim_response = fig.add_subplot(gs[0, 5:10], polar=True)
-    plot_channel_response(amps, ax=ax_sim_response)
+    plot_channel_response(
+        amps, ax=ax_sim_response, channel_idx=iem_channel_train
+    )
 
     # Plot EEG for single training block
     ax_eeg_train = fig.add_subplot(gs[0, 10:15])
@@ -361,7 +381,13 @@ def make_iem_fitting_figure(
 
     # Plot channel weights
     ax_weights = fig.add_subplot(gs[0, 15:20])
-    plot_channel_weights(epochs, iem.weights, ax=ax_weights, fig=fig)
+    plot_channel_weights(
+        epochs,
+        iem.weights,
+        ax=ax_weights,
+        fig=fig,
+        channel_idx=iem_channel_train,
+    )
 
     # Plot test stimulus
     ax_stimulus_test = fig.add_subplot(gs[1, :4])
@@ -369,7 +395,13 @@ def make_iem_fitting_figure(
 
     # Plot inverted channel weights
     ax_inv_weights = fig.add_subplot(gs[1, 4:8])
-    plot_channel_weights(epochs, iem.inv_weights.T, ax=ax_inv_weights, fig=fig)
+    plot_channel_weights(
+        epochs,
+        iem.inv_weights.T,
+        ax=ax_inv_weights,
+        fig=fig,
+        channel_idx=iem_channel_test,
+    )
 
     # Plot EEG for single testing block
     ax_eeg_test = fig.add_subplot(gs[1, 8:12])
@@ -379,7 +411,9 @@ def make_iem_fitting_figure(
     # Plot predicted channel response
     ax_ctf = fig.add_subplot(gs[1, 12:16], polar=True)
     estimated_ctf = iem.estimated_ctfs[iem_channel_test, :]
-    plot_channel_response(estimated_ctf, ax=ax_ctf)
+    plot_channel_response(
+        estimated_ctf, ax=ax_ctf, channel_idx=iem_channel_test
+    )
 
     # Plot CTF slope
     ax_slope = fig.add_subplot(gs[1, 16:20])
