@@ -1,6 +1,7 @@
 # Import necessary modules
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
+from matplotlib.patches import Circle
 import seaborn as sns
 import numpy as np
 import colorcet as cc
@@ -73,6 +74,60 @@ def fit_iem_single_case(
     iem.estimate_ctf(test_data, test_labels)
     iem.compute_ctf_slope()
     return iem, epochs, train_data, test_data
+
+
+def plot_stimulus(
+    angle_deg,
+    radius=0.55,
+    circle_radius=0.15,
+    color="#545454",
+    bgcolor="#737373",
+    ax=None,
+):
+    """
+    Plots a circle on a square 'stimulus' at a given angle and radius
+    around the center (0, 0).
+
+    Parameters
+    ----------
+    angle_deg : float
+        Angular position in degrees (0 to 360).
+    radius : float
+        The distance from the center (0, 0) at which to place the circle.
+    circle_radius : float, optional
+        The radius of the circle to be drawn. Defaults to 0.05.
+    color : str, optional
+        Color of the circle, e.g., 'black', 'red', etc. Defaults to 'black'.
+    """
+
+    # Convert from degrees to radians
+    angle_rad = np.deg2rad(angle_deg)
+
+    # Cartesian coordinates of the circle center
+    x = radius * np.cos(angle_rad)
+    y = radius * np.sin(angle_rad)
+
+    # Create a figure and axis
+    if ax is None:
+        _, ax = plt.subplots(figsize=(5, 5))
+
+    # Plot a gray square "background" that is large enough for the circle
+    ax.set_xlim(-1, 1)
+    ax.set_ylim(-1, 1)
+    ax.set_aspect("equal", adjustable="box")
+    ax.set_facecolor(bgcolor)
+
+    # Add the circle at (x, y)
+    circle = Circle((x, y), circle_radius, facecolor=color, edgecolor="none")
+    ax.add_patch(circle)
+
+    # Add a cross at the center
+    ax.plot([0, 0], [-0.03, 0.03], color=color, linewidth=2)
+    ax.plot([-0.03, 0.03], [0, 0], color=color, linewidth=2)
+
+    # Turn off axis ticks/labels if desired
+    ax.set_xticks([])
+    ax.set_yticks([])
 
 
 def plot_channel_response(
@@ -288,6 +343,12 @@ def make_iem_fitting_figure(
     fig = plt.figure(figsize=(24, 12))
     gs = fig.add_gridspec(2, 5)
 
+    # Plot stimulus
+    ax_stimulus_train = fig.add_subplot(gs[0, 0])
+    plot_stimulus(
+        IEM().channel_centers[iem_channel_train], ax=ax_stimulus_train
+    )
+
     # Plot channel response
     amps = iem.design_matrix[:, iem_channel_train]
     ax_sim_response = fig.add_subplot(gs[0, 1], polar=True)
@@ -301,6 +362,10 @@ def make_iem_fitting_figure(
     # Plot channel weights
     ax_weights = fig.add_subplot(gs[0, 3])
     plot_channel_weights(epochs, iem.weights, ax=ax_weights, fig=fig)
+
+    # Plot test stimulus
+    ax_stimulus_test = fig.add_subplot(gs[1, 0])
+    plot_stimulus(IEM().channel_centers[iem_channel_test], ax=ax_stimulus_test)
 
     # Plot inverted channel weights
     ax_inv_weights = fig.add_subplot(gs[1, 1])
