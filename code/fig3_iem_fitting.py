@@ -14,7 +14,7 @@ from train_and_test_model import (
     load_param_data,
     equalize_param_data_across_trial_blocks,
 )
-from fig2_analysis_pipeline import set_montage
+from fig2_analysis_pipeline import set_montage, add_letter_labels
 
 
 def fit_iem_single_case(
@@ -341,49 +341,53 @@ def make_iem_fitting_figure(
 
     # Make figure
     fig = plt.figure(figsize=(24, 12))
-    gs = fig.add_gridspec(2, 5)
+    gs = fig.add_gridspec(2, 20)
 
     # Plot stimulus
-    ax_stimulus_train = fig.add_subplot(gs[0, 0])
+    ax_stimulus_train = fig.add_subplot(gs[0, :5])
     plot_stimulus(
         IEM().channel_centers[iem_channel_train], ax=ax_stimulus_train
     )
 
     # Plot channel response
     amps = iem.design_matrix[:, iem_channel_train]
-    ax_sim_response = fig.add_subplot(gs[0, 1], polar=True)
+    ax_sim_response = fig.add_subplot(gs[0, 5:10], polar=True)
     plot_channel_response(amps, ax=ax_sim_response)
 
     # Plot EEG for single training block
-    ax_eeg_train = fig.add_subplot(gs[0, 2])
+    ax_eeg_train = fig.add_subplot(gs[0, 10:15])
     eeg_train = np.mean(train_data[:, iem_channel_train :: len(amps)], axis=1)
     plot_eeg(epochs, eeg_train, ax=ax_eeg_train)
 
     # Plot channel weights
-    ax_weights = fig.add_subplot(gs[0, 3])
+    ax_weights = fig.add_subplot(gs[0, 15:20])
     plot_channel_weights(epochs, iem.weights, ax=ax_weights, fig=fig)
 
     # Plot test stimulus
-    ax_stimulus_test = fig.add_subplot(gs[1, 0])
+    ax_stimulus_test = fig.add_subplot(gs[1, :4])
     plot_stimulus(IEM().channel_centers[iem_channel_test], ax=ax_stimulus_test)
 
     # Plot inverted channel weights
-    ax_inv_weights = fig.add_subplot(gs[1, 1])
+    ax_inv_weights = fig.add_subplot(gs[1, 4:8])
     plot_channel_weights(epochs, iem.inv_weights.T, ax=ax_inv_weights, fig=fig)
 
     # Plot EEG for single testing block
-    ax_eeg_test = fig.add_subplot(gs[1, 2])
+    ax_eeg_test = fig.add_subplot(gs[1, 8:12])
     eeg_test = test_data[:, iem_channel_test]
     plot_eeg(epochs, eeg_test, ax=ax_eeg_test)
 
     # Plot predicted channel response
-    ax_ctf = fig.add_subplot(gs[1, 3], polar=True)
+    ax_ctf = fig.add_subplot(gs[1, 12:16], polar=True)
     estimated_ctf = iem.estimated_ctfs[iem_channel_test, :]
     plot_channel_response(estimated_ctf, ax=ax_ctf)
 
     # Plot CTF slope
-    ax_slope = fig.add_subplot(gs[1, -1])
+    ax_slope = fig.add_subplot(gs[1, 16:20])
     plot_ctf_slope(estimated_ctf, ax=ax_slope)
+
+    # Add letter labels
+    axes = fig.get_axes()
+    add_letter_labels(axes)
 
     # Save figure
     if save_fname is not None:
