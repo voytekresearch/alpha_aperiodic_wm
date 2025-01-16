@@ -5,6 +5,7 @@ import numpy as np
 import os
 import pandas as pd
 import seaborn as sns
+from scipy import stats
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from train_and_test_model import fit_model_desired_params
@@ -40,6 +41,7 @@ def plot_model_fit(
     t_arrays,
     task_num,
     task_timings,
+    sig_pval=0.05,
     params_to_plot=params.PARAMS_TO_PLOT,
     model_output_name="CTF slope",
     save_fname=None,
@@ -70,6 +72,7 @@ def plot_model_fit(
         Whether to plot task timings.
     plot_errorbars : bool (default: False)
         Whether to include error bars in the plot.
+
     ax : matplotlib.axes.Axes (default: None)
         Axes on which to plot.
     """
@@ -124,10 +127,15 @@ def plot_model_fit(
     )
 
     # Plot aesthetics
+    xmin = model_fits_big_df["Time (s)"].min()
+    xmax = model_fits_big_df["Time (s)"].max()
+    ax.set_xlim(xmin, xmax)
     legend = ax.legend(loc="upper left", bbox_to_anchor=(1.1, 1))
     if task_num != 0 or not save_fname:
         legend.remove()
     _, _, _, ymax = ax.axis()
+
+    # Plot task timings
     if plot_timings:
         ax.axvline(0.0, c="gray", ls="--")
         ax.text(0.03, ymax, "Stimulus onset", va="bottom", ha="right", size=24)
@@ -144,6 +152,22 @@ def plot_model_fit(
             size=24,
         )
         ax.set_xlim(None, task_timings[1])
+
+    # Plot significance threshold
+    if sig_pval:
+        zscore = stats.norm.ppf(1 - sig_pval / 2)
+        ax.axhline(zscore, c="r", ls="--", lw=2)
+        ax.text(
+            xmin + 0.05,
+            zscore,
+            r"$p < 0.05$",
+            va="bottom",
+            ha="left",
+            size=24,
+            color="r",
+        )
+
+    # Set plot title and labels
     ax.set_title(
         f"Task {task_num + 1} (n = {n})",
         fontsize=48,
