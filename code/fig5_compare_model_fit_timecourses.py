@@ -155,7 +155,7 @@ def compare_model_fits_across_windows(
             ax=ax,
         )
         ax.set_title(details["name"], fontsize=16)
-        ax.legend(title="Time Window", loc="lower left")
+        ax.legend(title="Time Window", loc="upper left")
         sns.despine(ax=ax)
 
         # Compare encoding and delay time windows
@@ -233,22 +233,39 @@ def compare_model_fits_across_windows(
     )
 
 
+from scipy.stats import pearsonr
+from statsmodels.stats.multitest import multipletests
+
+
 def compare_model_fits_across_params(
     model_fits_all_params,
     model_output_name,
     params_to_compare=(("Alpha total power", "Alpha oscillatory power"),),
     save_fname=None,
-    fig_dir=params.FIG_DIR,
+    fig_dir=None,
     time_window="delay",
     axes=None,
+    correction_method="fdr_bh",  # Default to Benjamini-Hochberg correction
 ):
-    """"""
+    """
+    Compare model fits across parameter pairs and include correlation coefficients and corrected p-values in the legend.
+
+    Parameters:
+        model_fits_all_params (pd.DataFrame): DataFrame with model fit data.
+        model_output_name (str): Column name containing the output values for comparison.
+        params_to_compare (list of tuples): Pairs of parameters to compare.
+        save_fname (str, optional): File name to save the figure.
+        fig_dir (str, optional): Directory to save the figure.
+        time_window (str): Time window to filter the data.
+        axes (list of Axes, optional): Existing matplotlib Axes for plotting.
+        correction_method (str): Method for multiple comparison correction (default: 'fdr_bh').
+    """
     # Filter for the desired time window
     model_fits_time_window = model_fits_all_params[
         model_fits_all_params["Time Window"] == time_window
     ]
 
-    # Create subplots
+    # Create subplots if not provided
     if axes is None:
         _, axes = plt.subplots(
             1,
@@ -273,6 +290,31 @@ def compare_model_fits_across_params(
             values=model_output_name,
         ).reset_index()
 
+        # Compute correlation coefficients and p-values for each Task
+        pivot_data = pivot_data.dropna(subset=[param_pair[0], param_pair[1]])
+        tasks = pivot_data["Task"].unique()
+        correlations = {}
+        p_values = []
+
+        for task in tasks:
+            x = pivot_data[pivot_data["Task"] == task][param_pair[0]]
+            y = pivot_data[pivot_data["Task"] == task][param_pair[1]]
+            _, p = pearsonr(x, y)
+            p_values.append(p)
+
+        # Correct p-values for multiple comparisons
+        corrected_p_values = multipletests(p_values, method=correction_method)[
+            1
+        ]
+
+        # Get star annotations for corrected p-values
+        star_annotations = [get_star_annotation(p) for p in corrected_p_values]
+
+        # Add correlation and corrected p-value to the Task labels
+        pivot_data["Task"] = pivot_data["Task"].apply(
+            lambda t: f"Task {t}, {star_annotations[list(tasks).index(t)]}"
+        )
+
         # Plot using seaborn
         sns.scatterplot(
             data=pivot_data,
@@ -286,9 +328,14 @@ def compare_model_fits_across_params(
         axes[i].set_ylabel(param_pair[1])
         sns.despine(ax=axes[i])
 
-    # Plot identity line for comparison
-    for ax in axes:
-        ax.plot(ax.get_xlim(), ax.get_ylim(), ls="--", c=".3")
+        # Plot identity line for comparison
+        axes[i].plot(
+            axes[i].get_xlim(),
+            axes[i].get_ylim(),
+            ls="--",
+            c=".3",
+            label="Identity line",
+        )
 
     # Adjust layout and optionally save the figure
     plt.tight_layout()
