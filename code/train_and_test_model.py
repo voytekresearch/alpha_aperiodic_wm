@@ -52,6 +52,17 @@ def load_param_data(
         verbose=False,
     )
 
+    # Select only EEG channels
+    picks = mne.pick_types(
+        epochs.info,
+        eeg=True,
+        meg=False,
+        eog=False,
+        misc=False,
+        exclude=["HEOG", "VEOG", "StimTrak"],
+    )
+    epochs = epochs.pick(picks)
+
     # Get times from epochs, taking account of decimation if applied
     times = epochs.times
     if param != "total_power":
@@ -63,9 +74,13 @@ def load_param_data(
         return epochs, times, param_data
 
     # Load parameterized data
-    param_data = mne.read_epochs(
-        os.path.join(param_dir, f"{subj}_{param}_epo.fif"), verbose=False
-    ).get_data(copy=True)
+    param_data = (
+        mne.read_epochs(
+            os.path.join(param_dir, f"{subj}_{param}_epo.fif"), verbose=False
+        )
+        .pick(picks)
+        .get_data(copy=True)
+    )
     return epochs, times, param_data
 
 
