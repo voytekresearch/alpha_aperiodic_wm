@@ -8,6 +8,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from train_and_test_model import fit_model_desired_params
+from fig2_analysis_pipeline import add_letter_labels
 import params
 
 
@@ -220,6 +221,7 @@ def plot_model_fit_time_courses(
     gs = gridspec.GridSpec(num_tasks // 2 + 1, 2, figure=fig)
 
     # Plot model fit time courses for parameters
+    axes = []
     for task_num in range(len(subjects_by_task)):
         model_fits_one_task = {
             k: v[task_num] for k, v in model_fits_all_params.items()
@@ -255,6 +257,9 @@ def plot_model_fit_time_courses(
                 model_output_name=model_output_name,
             )
 
+            # Add axis to list of axes
+            axes.append(ax)
+
     # Get legend handles and labels from the last axis
     handles, labels = ax.get_legend_handles_labels()
     dup_idx = np.where(pd.DataFrame(labels).duplicated(keep=False))[0]
@@ -264,6 +269,9 @@ def plot_model_fit_time_courses(
     ax_legend = fig.add_subplot(gs[-1, -1])
     ax_legend.axis("off")
     ax_legend.legend(handles, labels, loc="center", fontsize=36)
+
+    # Add letter labels to subplots
+    add_letter_labels(axes, size=64)
 
     # Save figure
     os.makedirs(fig_dir, exist_ok=True)
