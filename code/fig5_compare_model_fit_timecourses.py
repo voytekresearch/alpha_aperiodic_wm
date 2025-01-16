@@ -4,7 +4,7 @@ import os
 import pandas as pd
 import seaborn as sns
 from statannotations.Annotator import Annotator
-from scipy.stats import ttest_1samp
+from scipy.stats import ttest_1samp, pearsonr
 from statsmodels.stats.multitest import multipletests
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
@@ -52,9 +52,7 @@ def compare_model_fits_across_windows(
     t_arrays,
     params_to_plot=params.PARAMS_TO_PLOT,
     model_output_name="CTF slope",
-    save_fname=None,
     task_timings=params.TASK_TIMINGS,
-    fig_dir=params.FIG_DIR,
     axes=None,
 ):
     """Plot model fits averaged over specified time windows with statistical
@@ -222,30 +220,19 @@ def compare_model_fits_across_windows(
         # Append to list of DataFrames for all parameters
         model_fits_all_params.append(model_fits_big_df)
     plt.tight_layout()
-
-    # Save the figure if needed
-    if save_fname:
-        os.makedirs(fig_dir, exist_ok=True)
-        plt.savefig(f"{fig_dir}/{save_fname}", bbox_inches="tight", dpi=300)
     return (
         pd.concat(model_fits_all_params).reset_index(drop=True),
         new_model_output_name,
     )
 
 
-from scipy.stats import pearsonr
-from statsmodels.stats.multitest import multipletests
-
-
 def compare_model_fits_across_params(
     model_fits_all_params,
     model_output_name,
     params_to_compare=(("Alpha total power", "Alpha oscillatory power"),),
-    save_fname=None,
-    fig_dir=None,
     time_window="delay",
     axes=None,
-    correction_method="fdr_bh",  # Default to Benjamini-Hochberg correction
+    correction_method="fdr_bh",
 ):
     """
     Compare model fits across parameter pairs and include correlation coefficients and corrected p-values in the legend.
@@ -339,13 +326,11 @@ def compare_model_fits_across_params(
 
     # Adjust layout and optionally save the figure
     plt.tight_layout()
-    if save_fname and fig_dir:
-        plt.savefig(f"{fig_dir}/{save_fname}", bbox_inches="tight", dpi=300)
 
 
 def compare_model_fit_timecourses(
     fig_dir=params.FIG_DIR,
-    save_fname="fig5_compare_model_fit_timecourses_big.png",
+    save_fname="fig5_compare_model_fit_timecourses.png",
 ):
     """"""
     # Plot model fits across time windows
