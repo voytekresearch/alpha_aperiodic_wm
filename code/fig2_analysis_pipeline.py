@@ -364,7 +364,7 @@ def plot_sparam_topomaps(
     return
 
 
-def letter_label(label, ax, x=-0.1, y=1.05):
+def letter_label(label, ax, x=-0.1, y=1.05, size=28):
     """Plot letter label on publication figures.
 
     Parameters
@@ -385,16 +385,17 @@ def letter_label(label, ax, x=-0.1, y=1.05):
         y,
         "%s" % label,
         transform=ax.transAxes,
-        size=28,
+        size=size,
         weight="bold",
     )
 
 
-def add_letter_labels(axes):
+def add_letter_labels(axes, size=None):
     """Add letter labels to figure."""
     for i, ax in enumerate(axes):
         label = string.ascii_uppercase[i]
-        letter_label(label, ax)
+        kwargs = {} if size is None else {"size": size}
+        letter_label(label, ax, **kwargs)
     return
 
 

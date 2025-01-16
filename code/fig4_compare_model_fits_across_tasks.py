@@ -143,15 +143,7 @@ def plot_model_fit(
             ha=offset_ha,
             size=24,
         )
-        ax.axvline(task_timings[1], c="gray", ls="--")
-        ax.text(
-            task_timings[1],
-            ymax,
-            "Free response",
-            va="bottom",
-            ha="center",
-            size=24,
-        )
+        ax.set_xlim(None, task_timings[1])
     ax.set_title(
         f"Task {task_num + 1} (n = {n})",
         fontsize=48,
