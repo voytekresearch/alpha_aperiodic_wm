@@ -180,7 +180,7 @@ def plot_model_fit_time_courses(
     subjects_by_task=params.SUBJECTS_BY_TASK,
     fig_dir=params.FIG_DIR,
     task_timings=params.TASK_TIMINGS,
-    save_fname="fig3_compare_model_fits_across_tasks.png",
+    save_fname="fig4_compare_model_fits_across_tasks.png",
 ):
     """Plot model fit time courses for total power and parameters from spectral
     parameterization.

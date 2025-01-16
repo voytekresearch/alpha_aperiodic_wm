@@ -296,7 +296,10 @@ def compare_model_fits_across_params(
         plt.savefig(f"{fig_dir}/{save_fname}", bbox_inches="tight", dpi=300)
 
 
-def compare_model_fit_timecourses(fig_dir=params.FIG_DIR):
+def compare_model_fit_timecourses(
+    fig_dir=params.FIG_DIR,
+    save_fname="fig5_compare_model_fit_timecourses_big.png",
+):
     """"""
     # Plot model fits across time windows
     ctf_slopes, t_arrays = fit_model_desired_params(
@@ -339,7 +342,7 @@ def compare_model_fit_timecourses(fig_dir=params.FIG_DIR):
 
     # Save figure
     os.makedirs(fig_dir, exist_ok=True)
-    fig_fname = f"{fig_dir}/fig4_compare_model_fit_timecourses_big.png"
+    fig_fname = f"{fig_dir}/{save_fname}"
     plt.savefig(fig_fname, bbox_inches="tight", dpi=300)
     return
 
