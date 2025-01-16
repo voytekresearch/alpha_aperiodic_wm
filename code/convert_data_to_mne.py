@@ -143,7 +143,7 @@ def split_data_by_subject(
             exp_data, experiment_vars["pos_bin"], subject
         )
         pos = _index_nested_object(exp_data, experiment_vars["pos"], subject)
-        if pos is None:
+        if pos is None or len(pos) == 0:
             pos = _index_nested_object(
                 exp_data, experiment_vars["pos_backup"], subject
             )
@@ -188,7 +188,8 @@ def split_data_by_subject(
                 if len(val) > 1:
                     metadata_dct[key] = val.flatten()
         metadata_df = pd.DataFrame(metadata_dct)
-
+        print(subject)
+        print(metadata_df)
         # Make sure position is in 0-360 range
         assert (
             0 <= metadata_df["pos"].values.any() < 360
