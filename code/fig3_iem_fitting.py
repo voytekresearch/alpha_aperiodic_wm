@@ -18,7 +18,7 @@ from fig2_analysis_pipeline import set_montage, add_letter_labels
 
 
 def fit_iem_single_case(
-    subj="CS_1",
+    subj="CS_2",
     param="linOscAUC",
     tp=0.5,
     param_dir=params.SPARAM_DIR,
@@ -134,8 +134,6 @@ def plot_channel_response(
     amps,
     ax=None,
     colors=None,
-    fig_dir=params.FIG_DIR,
-    save_fname="channel_response.png",
     channel_idx=None,
 ):
     # Make figure
@@ -169,8 +167,6 @@ def plot_channel_response(
             linewidth=linewidth,
         )
     ax.axis("off")
-    if save_fname is not None:
-        plt.savefig(f"{fig_dir}/{save_fname}", dpi=300, bbox_inches="tight")
     return ax
 
 
@@ -178,8 +174,6 @@ def plot_eeg(
     epochs,
     data,
     ax=None,
-    fig_dir=params.FIG_DIR,
-    save_fname="eeg.png",
 ):
     # Make figure
     if ax is None:
@@ -188,11 +182,7 @@ def plot_eeg(
     # Plot EEG
     epochs = set_montage(epochs)
     mne.viz.plot_topomap(data, epochs.info, axes=ax, show=False)
-
-    # Save figure
-    if save_fname is not None:
-        plt.savefig(f"{fig_dir}/{save_fname}", dpi=300, bbox_inches="tight")
-    return
+    return ax
 
 
 def plot_channel_weights(
@@ -202,14 +192,12 @@ def plot_channel_weights(
     ax=None,
     colors=None,
     channel_idx=None,
-    fig_dir=params.FIG_DIR,
-    save_fname="iem_channel_weights.png",
 ):
     # Make sure both fig and ax are either None or not None
     assert bool(fig) == bool(ax)
 
     # Get colors
-    n_sensors, n_channels = weights.shape
+    _, n_channels = weights.shape
     if colors is None:
         colors = [
             cc.cyclic_isoluminant[
@@ -274,12 +262,9 @@ def plot_channel_weights(
             [trans_inv[0] - 0.05, trans_inv[1] - 0.05, 0.1, 0.1]
         )
 
-    if save_fname is not None:
-        plt.savefig(f"{fig_dir}/{save_fname}", dpi=300, bbox_inches="tight")
-
     # Place the main axis within the given axis
     if ax is not None:
-        temp_path = f"{fig_dir}/temp.png"
+        temp_path = "temp.png"
         extent = main_ax.get_window_extent().transformed(
             fig.dpi_scale_trans.inverted()
         )
@@ -295,15 +280,15 @@ def plot_channel_weights(
         )
         ax.axis("off")
         os.remove(temp_path)
-    return
+        return ax
+    return main_ax
 
 
 def plot_ctf_slope(
     amps,
+    idx,
     ax=None,
     colors=None,
-    fig_dir=params.FIG_DIR,
-    save_fname="ctf_slope_scatter.png",
 ):
     # Get colors
     if colors is None:
@@ -313,9 +298,6 @@ def plot_ctf_slope(
             ]
             for i in range(len(amps))
         ]
-
-    # Determine index of maximum amplitude
-    idx = np.argmax(amps)
 
     # Calculate distance from tuned
     channel_centers = IEM().channel_centers
@@ -341,46 +323,54 @@ def plot_ctf_slope(
     ax.set_xlabel("Distance from tuned (degrees)", fontsize=14)
     ax.set_ylabel("Activation", fontsize=14)
     sns.despine(ax=ax)
-
-    # Save figure
-    if save_fname is not None:
-        plt.savefig(f"{fig_dir}/{save_fname}", dpi=300, bbox_inches="tight")
-    return
+    return ax
 
 
 def make_iem_fitting_figure(
     fig_dir=params.FIG_DIR,
     save_fname="fig3_iem_fitting.png",
-    iem_channel_train=0,
-    iem_channel_test=1,
+    iem_channel_train=1,
+    iem_channel_test=5,
+    title_fontsize=16,
 ):
     # Fit IEM model for single block
     iem, epochs, train_data, test_data = fit_iem_single_case()
 
     # Make figure
-    fig = plt.figure(figsize=(24, 12))
-    gs = fig.add_gridspec(2, 20)
+    fig = plt.figure(figsize=(24, 18))
+    gs = fig.add_gridspec(3, 4)
 
     # Plot stimulus
-    ax_stimulus_train = fig.add_subplot(gs[0, :5])
+    ax_stimulus_train = fig.add_subplot(gs[0, 0])
     plot_stimulus(
         IEM().channel_centers[iem_channel_train], ax=ax_stimulus_train
     )
+    ax_stimulus_train.set_title(
+        "Training stimulus", y=1.04, fontsize=title_fontsize
+    )
 
     # Plot channel response
-    amps = iem.design_matrix[:, iem_channel_train]
-    ax_sim_response = fig.add_subplot(gs[0, 5:10], polar=True)
+    crf = iem.design_matrix[:, iem_channel_train]
+    ax_sim_response = fig.add_subplot(gs[0, 1], polar=True)
     plot_channel_response(
-        amps, ax=ax_sim_response, channel_idx=iem_channel_train
+        crf, ax=ax_sim_response, channel_idx=iem_channel_train
+    )
+    ax_sim_response.set_title(
+        "Predicted channel responses\n$C_{train}$",
+        y=0.99,
+        fontsize=title_fontsize,
     )
 
     # Plot EEG for single training block
-    ax_eeg_train = fig.add_subplot(gs[0, 10:15])
-    eeg_train = np.mean(train_data[:, iem_channel_train :: len(amps)], axis=1)
+    ax_eeg_train = fig.add_subplot(gs[0, 2])
+    eeg_train = np.mean(train_data[:, iem_channel_train :: len(crf)], axis=1)
     plot_eeg(epochs, eeg_train, ax=ax_eeg_train)
+    ax_eeg_train.set_title(
+        "Training EEG activity\n$B_{train}$", y=0.98, fontsize=title_fontsize
+    )
 
     # Plot channel weights
-    ax_weights = fig.add_subplot(gs[0, 15:20])
+    ax_weights = fig.add_subplot(gs[0, 3])
     plot_channel_weights(
         epochs,
         iem.weights,
@@ -388,13 +378,19 @@ def make_iem_fitting_figure(
         fig=fig,
         channel_idx=iem_channel_train,
     )
+    ax_weights.set_title(
+        "Estimated channel weights\n$W$", fontsize=title_fontsize
+    )
 
     # Plot test stimulus
-    ax_stimulus_test = fig.add_subplot(gs[1, :4])
+    ax_stimulus_test = fig.add_subplot(gs[1, 0])
     plot_stimulus(IEM().channel_centers[iem_channel_test], ax=ax_stimulus_test)
+    ax_stimulus_test.set_title(
+        "Test stimulus", y=1.04, fontsize=title_fontsize
+    )
 
     # Plot inverted channel weights
-    ax_inv_weights = fig.add_subplot(gs[1, 4:8])
+    ax_inv_weights = fig.add_subplot(gs[1, 1])
     plot_channel_weights(
         epochs,
         iem.inv_weights.T,
@@ -402,22 +398,36 @@ def make_iem_fitting_figure(
         fig=fig,
         channel_idx=iem_channel_test,
     )
+    ax_inv_weights.set_title(
+        "Inverted channel weights\n$W^{-1}$", fontsize=title_fontsize
+    )
 
     # Plot EEG for single testing block
-    ax_eeg_test = fig.add_subplot(gs[1, 8:12])
+    ax_eeg_test = fig.add_subplot(gs[1, 2])
     eeg_test = test_data[:, iem_channel_test]
     plot_eeg(epochs, eeg_test, ax=ax_eeg_test)
+    ax_eeg_test.set_title(
+        "Test EEG activity\n$B_{test}$", y=0.98, fontsize=title_fontsize
+    )
 
     # Plot predicted channel response
-    ax_ctf = fig.add_subplot(gs[1, 12:16], polar=True)
+    ax_ctf = fig.add_subplot(gs[1, 3], polar=True)
     estimated_ctf = iem.estimated_ctfs[iem_channel_test, :]
     plot_channel_response(
         estimated_ctf, ax=ax_ctf, channel_idx=iem_channel_test
     )
+    ax_ctf.set_title(
+        "Estimated channel responses\n$C_{test}$",
+        y=0.98,
+        fontsize=title_fontsize,
+    )
 
     # Plot CTF slope
-    ax_slope = fig.add_subplot(gs[1, 16:20])
-    plot_ctf_slope(estimated_ctf, ax=ax_slope)
+    ax_ctf_slope = fig.add_subplot(gs[2, 1:3])
+    plot_ctf_slope(estimated_ctf, iem_channel_test, ax=ax_ctf_slope)
+    ax_ctf_slope.set_title(
+        "Channel tuning function (CTF) slope", fontsize=title_fontsize
+    )
 
     # Add letter labels
     axes = fig.get_axes()
@@ -426,7 +436,7 @@ def make_iem_fitting_figure(
     # Save figure
     if save_fname is not None:
         fig.savefig(f"{fig_dir}/{save_fname}", dpi=300, bbox_inches="tight")
-    return
+    plt.close(fig)
 
 
 if __name__ == "__main__":
