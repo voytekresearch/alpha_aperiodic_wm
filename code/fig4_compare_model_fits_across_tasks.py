@@ -135,23 +135,28 @@ def plot_model_fit(
         legend.remove()
     _, _, _, ymax = ax.axis()
 
-    # Plot task timings
+    # Plot task timings as shaded regions
     if plot_timings:
-        ax.axvline(0.0, c="gray", ls="--")
-        ax.text(0.03, ymax, "Stimulus onset", va="bottom", ha="right", size=24)
-        ax.axvline(task_timings[0], c="gray", ls="--")
-        offset_x, offset_ha = task_timings[0] + 0.03, "left"
-        if task_timings[0] > 0.75:
-            offset_x, offset_ha = task_timings[0], "center"
-        ax.text(
-            offset_x,
-            ymax,
-            "Stimulus offset",
-            va="bottom",
-            ha=offset_ha,
-            size=24,
+        # Shade the encoding period (stimulus onset to offset)
+        ax.axvspan(
+            0.0,
+            task_timings[0],
+            color="black",
+            alpha=0.1,
+            label="Encoding period",
         )
-        ax.set_xlim(None, task_timings[1])
+
+        # Shade the delay period (stimulus offset to the end of the plot)
+        ax.axvspan(
+            task_timings[0],
+            task_timings[1],
+            color="gray",
+            alpha=0.1,
+            label="Delay period",
+        )
+
+    # Set plot limits and aesthetics
+    ax.set_xlim(None, task_timings[1])
 
     # Plot significance threshold
     if sig_pval:
