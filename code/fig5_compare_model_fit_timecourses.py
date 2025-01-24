@@ -280,12 +280,16 @@ def compare_model_fits_across_params(
         # Compute correlation coefficients and p-values for each Task
         pivot_data = pivot_data.dropna(subset=[param_pair[0], param_pair[1]])
         tasks = pivot_data["Task"].unique()
-        correlations = {}
         p_values = []
 
         for task in tasks:
             x = pivot_data[pivot_data["Task"] == task][param_pair[0]]
             y = pivot_data[pivot_data["Task"] == task][param_pair[1]]
+            nom, denom = np.sum(x > y), len(x)
+            print(
+                f"Task {task}: {nom} of {denom} subjects "
+                f"had higher {param_pair[0]} than {param_pair[1]}."
+            )
             _, p = pearsonr(x, y)
             p_values.append(p)
 
