@@ -314,14 +314,14 @@ def plot_ctf_slope(
     # Fit and plot linear regression line
     a, b = np.polyfit(-dist_from_tuned, amps, 1)
     x = np.linspace(np.min(-dist_from_tuned), np.max(-dist_from_tuned), 100)
-    ax.plot(x, a * x + b, color="k", ls="--")
+    ax.plot(x, a * x + b, color="k", ls="--", lw=2)
 
     # Scatter plot
-    ax.scatter(-dist_from_tuned, amps, c=colors)
+    ax.scatter(-dist_from_tuned, amps, c=colors, s=200)
 
     # Labels and styling
-    ax.set_xlabel("Distance from tuned (degrees)", fontsize=14)
-    ax.set_ylabel("Activation", fontsize=14)
+    ax.set_xlabel("Distance from tuned (degrees)", fontsize=20)
+    ax.set_ylabel("Activation", fontsize=20)
     sns.despine(ax=ax)
     return ax
 
@@ -331,7 +331,7 @@ def make_iem_fitting_figure(
     save_fname="fig3_iem_fitting.png",
     iem_channel_train=1,
     iem_channel_test=5,
-    title_fontsize=16,
+    title_fontsize=24,
 ):
     # Fit IEM model for single block
     iem, epochs, train_data, test_data = fit_iem_single_case()
@@ -356,7 +356,7 @@ def make_iem_fitting_figure(
         crf, ax=ax_sim_response, channel_idx=iem_channel_train
     )
     ax_sim_response.set_title(
-        "Predicted channel responses\n$C_{train}$",
+        "Predicted channel\nresponses ($C_{train}$)",
         y=0.99,
         fontsize=title_fontsize,
     )
@@ -366,7 +366,7 @@ def make_iem_fitting_figure(
     eeg_train = np.mean(train_data[:, iem_channel_train :: len(crf)], axis=1)
     plot_eeg(epochs, eeg_train, ax=ax_eeg_train)
     ax_eeg_train.set_title(
-        "Training EEG activity\n$B_{train}$", y=0.98, fontsize=title_fontsize
+        "Training EEG activity\n($B_{train}$)", y=0.98, fontsize=title_fontsize
     )
 
     # Plot channel weights
@@ -379,7 +379,7 @@ def make_iem_fitting_figure(
         channel_idx=iem_channel_train,
     )
     ax_weights.set_title(
-        "Estimated channel weights\n$W$", fontsize=title_fontsize
+        "Estimated channel\nweights ($W$)", fontsize=title_fontsize
     )
 
     # Plot test stimulus
@@ -399,7 +399,7 @@ def make_iem_fitting_figure(
         channel_idx=iem_channel_test,
     )
     ax_inv_weights.set_title(
-        "Inverted channel weights\n$W^{-1}$", fontsize=title_fontsize
+        "Inverted channel\nweights ($W^{-1}$)", fontsize=title_fontsize
     )
 
     # Plot EEG for single testing block
@@ -407,7 +407,7 @@ def make_iem_fitting_figure(
     eeg_test = test_data[:, iem_channel_test]
     plot_eeg(epochs, eeg_test, ax=ax_eeg_test)
     ax_eeg_test.set_title(
-        "Test EEG activity\n$B_{test}$", y=0.98, fontsize=title_fontsize
+        "Test EEG activity\n($B_{test}$)", y=0.98, fontsize=title_fontsize
     )
 
     # Plot predicted channel response
@@ -417,7 +417,7 @@ def make_iem_fitting_figure(
         estimated_ctf, ax=ax_ctf, channel_idx=iem_channel_test
     )
     ax_ctf.set_title(
-        "Estimated channel responses\n$C_{test}$",
+        "Estimated channel\nresponses ($C_{test}$)",
         y=0.98,
         fontsize=title_fontsize,
     )
