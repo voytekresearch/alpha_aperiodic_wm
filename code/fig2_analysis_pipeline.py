@@ -177,13 +177,12 @@ def plot_multitaper(
     trial_tfr[0].average().plot(
         axes=ax,
         show=False,
-        dB=True,
         cmap="magma",
         vmin=np.min(trial_tfr),
     )
     # Mark time point of interest if provided
     if tp is not None:
-        ax.axvline(tp, color=(0, 0, 0, 0.5), linestyle="--")
+        ax.axvline(tp, color="grey", linestyle="--")
     return trial_tfr
 
 
