@@ -93,7 +93,9 @@ def plot_epochs(
     for i, ch in enumerate(chs_to_plot):
         sub_ax = plt.subplot(gs[i])
         sub_ax.plot(trial_epochs.times, ch_data[0, i, :], color="black")
-        sub_ax.set_ylabel(ch, rotation=0, labelpad=20, ha="right", va="center")
+        sub_ax.set_ylabel(
+            ch, rotation=0, labelpad=20, ha="right", va="center", fontsize=20
+        )
         sub_ax.tick_params(
             axis="y", which="both", left=False
         )  # Remove y-axis ticks
@@ -125,7 +127,7 @@ def plot_epochs(
         sub_ax.set_xticklabels(
             []
         )  # Remove x-axis labels for all but the last subplot
-    axes[-1].set_xlabel("Time (s)")
+    axes[-1].set_xlabel("Time (s)", fontsize=20)
 
     return axes
 
@@ -179,10 +181,22 @@ def plot_multitaper(
         show=False,
         cmap="magma",
         vmin=np.min(trial_tfr),
+        colorbar=False,
     )
+    im = ax.images[0]
+    cbar = ax.get_figure().colorbar(im, ax=ax)
+    cbar.set_label("Power", fontsize=20, rotation=270)
+    label = cbar.ax.yaxis.label
+    label.set_rotation_mode("anchor")
+    cbar.ax.yaxis.set_label_coords(4.5, 0.5)
+
     # Mark time point of interest if provided
     if tp is not None:
         ax.axvline(tp, color="grey", linestyle="--")
+
+    # Plot aesthetics
+    ax.set_xlabel("Time (s)", fontsize=20)
+    ax.set_ylabel("Frequency (Hz)", fontsize=20)
     return trial_tfr
 
 
@@ -268,8 +282,10 @@ def plot_sparam_psd(
     # Plot aesthetics
     ax.set_ylim([0, y_max])
     ax.grid(False)
+    ax.set_xlabel("Frequency (Hz)", fontsize=20)
+    ax.set_ylabel("Power", fontsize=20)
     sns.despine(ax=ax)
-    ax.legend(loc="upper right")
+    ax.legend(loc="upper right", fontsize=14)
     return
 
 
@@ -310,9 +326,9 @@ def plot_sparam_params(
         ax.axvline(tp, color=(0, 0, 0, 0.5), linestyle="--")
 
     # Plot aesthetics
-    ax.set_xlabel("Time (s)")
-    ax.set_ylabel("Z-score")
-    ax.legend(title="Parameter")
+    ax.set_xlabel("Time (s)", fontsize=20)
+    ax.set_ylabel("Z-score", fontsize=20)
+    ax.legend(title="Parameter", title_fontsize=16, fontsize=12)
     sns.despine(ax=ax)
     return
 
@@ -351,7 +367,7 @@ def plot_sparam_topomaps(
 
         # Plot topomap
         ax = fig.add_subplot(gs[i])
-        ax.set_title(param["name"], color=param["color"])
+        ax.set_title(param["name"], color=param["color"], fontsize=16)
         ax.set_aspect("equal")
         mne.viz.plot_topomap(
             np.real(tp_data),
