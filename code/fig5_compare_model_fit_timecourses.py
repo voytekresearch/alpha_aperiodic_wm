@@ -152,8 +152,16 @@ def compare_model_fits_across_windows(
             dodge=True,
             ax=ax,
         )
-        ax.set_title(details["name"], fontsize=16)
-        ax.legend(title="Time Window", loc="upper left")
+        ax.set_xlabel("Task", fontsize=18)
+        ax.set_ylabel(new_model_output_name, fontsize=18)
+        ax.tick_params(labelsize=14)
+        ax.set_title(details["name"], fontsize=20)
+        ax.legend(
+            title="Time Window",
+            loc="upper left",
+            fontsize=14,
+            title_fontsize=18,
+        )
         sns.despine(ax=ax)
 
         # Compare encoding and delay time windows
@@ -303,7 +311,7 @@ def compare_model_fits_across_params(
 
         # Add correlation and corrected p-value to the Task labels
         pivot_data["Task"] = pivot_data["Task"].apply(
-            lambda t: f"Task {t}, {star_annotations[list(tasks).index(t)]}"
+            lambda t: f"{t}, {star_annotations[list(tasks).index(t)]}"
         )
 
         # Plot using seaborn
@@ -315,8 +323,11 @@ def compare_model_fits_across_params(
             ax=axes[i],
             palette="Spectral",
         )
-        axes[i].set_xlabel(param_pair[0])
-        axes[i].set_ylabel(param_pair[1])
+        axes[i].set_xlabel(param_pair[0], fontsize=18)
+        axes[i].set_ylabel(param_pair[1], fontsize=18)
+        axes[i].legend(
+            title="Task", loc="upper left", fontsize=12, title_fontsize=18
+        )
         sns.despine(ax=axes[i])
 
         # Plot identity line for comparison
