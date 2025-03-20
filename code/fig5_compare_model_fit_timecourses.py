@@ -345,7 +345,7 @@ def compare_model_fits_across_params(
 
 def compare_model_fit_timecourses(
     fig_dir=params.FIG_DIR,
-    save_fname="fig5_compare_model_fit_timecourses.png",
+    save_fname="fig5_compare_model_fit_timecourses.pdf",
 ):
     """"""
     # Plot model fits across time windows

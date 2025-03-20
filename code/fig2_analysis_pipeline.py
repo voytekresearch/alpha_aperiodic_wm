@@ -467,7 +467,7 @@ def plot_analysis_pipeline(
     add_letter_labels(axes)
 
     # Save figure
-    fig_fname = f"{fig_dir}/fig2_analysis_pipeline.png"
+    fig_fname = f"{fig_dir}/fig2_analysis_pipeline.pdf"
     fig.savefig(fig_fname, dpi=300, bbox_inches="tight")
     return
 

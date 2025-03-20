@@ -268,7 +268,7 @@ def plot_channel_weights(
         extent = main_ax.get_window_extent().transformed(
             fig.dpi_scale_trans.inverted()
         )
-        fig.savefig(temp_path, bbox_inches=extent)
+        fig.savefig(temp_path, bbox_inches=extent, dpi=300)
 
         # Clear ax2 and display the saved image
         ax.clear()
@@ -328,7 +328,7 @@ def plot_ctf_slope(
 
 def make_iem_fitting_figure(
     fig_dir=params.FIG_DIR,
-    save_fname="fig3_iem_fitting.png",
+    save_fname="fig3_iem_fitting.pdf",
     iem_channel_train=1,
     iem_channel_test=5,
     title_fontsize=24,

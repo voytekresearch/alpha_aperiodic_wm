@@ -21,5 +21,5 @@ if __name__ == "__main__":
         title="All parameters",
         plt_errorbars=True,
         name="iem",
-        save_fname="sfig1_iem_spec_param_distractors.png",
+        save_fname="sfig1_iem_spec_param_distractors.pdf",
     )
