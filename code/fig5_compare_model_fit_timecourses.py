@@ -323,8 +323,8 @@ def compare_model_fits_across_params(
             ax=axes[i],
             palette="Spectral",
         )
-        axes[i].set_xlabel(param_pair[0], fontsize=18)
-        axes[i].set_ylabel(param_pair[1], fontsize=18)
+        axes[i].set_xlabel(f"{param_pair[0]} CTF slope", fontsize=18)
+        axes[i].set_ylabel(f"{param_pair[1]} CTF slope", fontsize=18)
         axes[i].legend(
             title="Task", loc="upper left", fontsize=12, title_fontsize=18
         )
