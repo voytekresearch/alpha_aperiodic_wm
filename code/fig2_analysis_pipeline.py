@@ -243,20 +243,20 @@ def plot_sparam_psd(
     y_min, y_max = ax.get_ylim()
     ax.fill_between(
         freqs[low_freq_idx : high_freq_idx + 1],
-        10 ** fm._ap_fit[low_freq_idx : high_freq_idx + 1],
-        y2=powers[low_freq_idx : high_freq_idx + 1],
-        color=params_to_plot["linOscAUC"]["color"],
-        alpha=0.8,
-        label=params_to_plot["linOscAUC"]["name"],
-    )
-    ax.fill_between(
-        freqs[low_freq_idx : high_freq_idx + 1],
         0,
         hatch="/",
         y2=powers[low_freq_idx : high_freq_idx + 1],
         color=params_to_plot["total_power"]["color"],
         alpha=0.5,
         label=params_to_plot["total_power"]["name"],
+    )
+    ax.fill_between(
+        freqs[low_freq_idx : high_freq_idx + 1],
+        10 ** fm._ap_fit[low_freq_idx : high_freq_idx + 1],
+        y2=powers[low_freq_idx : high_freq_idx + 1],
+        color=params_to_plot["linOscAUC"]["color"],
+        alpha=0.8,
+        label=params_to_plot["linOscAUC"]["name"],
     )
 
     # Plot greek character
