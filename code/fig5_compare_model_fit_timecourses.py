@@ -28,23 +28,14 @@ def get_star_annotation(p):
         return "ns"
 
 
-def adjust_brightness(hex_color, factor):
+def lighten_with_alpha_blending(hex_color, alpha):
     """
-    Adjust the brightness of a HEX color.
-
-    Parameters:
-    - hex_color (str): The HEX color (e.g., "#RRGGBB").
-    - factor (float): The brightness adjustment factor.
-                      >1 to lighten, <1 to darken.
-
-    Returns:
-    - str: The adjusted HEX color.
+    Blend a color with white background using alpha transparency.
     """
-    rgb = mcolors.to_rgb(hex_color)  # Convert HEX to RGB
-    adjusted_rgb = [
-        min(max(c * factor, 0), 1) for c in rgb
-    ]  # Adjust brightness
-    return mcolors.to_hex(adjusted_rgb)  # Convert back to HEX
+    fg = np.array(mcolors.to_rgb(hex_color))
+    bg = np.array([1, 1, 1])  # white background
+    blended = alpha * fg + (1 - alpha) * bg
+    return mcolors.to_hex(blended)
 
 
 def compare_model_fits_across_windows(
@@ -136,10 +127,10 @@ def compare_model_fits_across_windows(
         # Generate palette for time windows
         base_color = details["color"]
         time_windows_list = ["encoding", "delay"]
-        brightness_factors = [0.8, 1.2]  # Darker, original, lighter
+        alpha_vals = [1.0, 0.5]
         palette = {
-            window: adjust_brightness(base_color, factor)
-            for window, factor in zip(time_windows_list, brightness_factors)
+            window: lighten_with_alpha_blending(base_color, alpha)
+            for window, alpha in zip(time_windows_list, alpha_vals)
         }
 
         # Plot using seaborn
@@ -288,7 +279,7 @@ def compare_model_fits_across_params(
         # Compute correlation coefficients and p-values for each Task
         pivot_data = pivot_data.dropna(subset=[param_pair[0], param_pair[1]])
         tasks = pivot_data["Task"].unique()
-        p_values = []
+        r_values, p_values = [], []
 
         for task in tasks:
             x = pivot_data[pivot_data["Task"] == task][param_pair[0]]
@@ -298,7 +289,8 @@ def compare_model_fits_across_params(
                 f"Task {task}: {nom} of {denom} subjects "
                 f"had higher {param_pair[0]} than {param_pair[1]}."
             )
-            _, p = pearsonr(x, y)
+            r, p = pearsonr(x, y)
+            r_values.append(r)
             p_values.append(p)
 
         # Correct p-values for multiple comparisons
@@ -311,7 +303,8 @@ def compare_model_fits_across_params(
 
         # Add correlation and corrected p-value to the Task labels
         pivot_data["Task"] = pivot_data["Task"].apply(
-            lambda t: f"{t}, {star_annotations[list(tasks).index(t)]}"
+            lambda t: f"{t}, r={r_values[list(tasks).index(t)]:.2}, "
+            f"{star_annotations[list(tasks).index(t)]}"
         )
 
         # Plot using seaborn
@@ -323,10 +316,10 @@ def compare_model_fits_across_params(
             ax=axes[i],
             palette="Spectral",
         )
-        axes[i].set_xlabel(f"{param_pair[0]} CTF slope", fontsize=18)
-        axes[i].set_ylabel(f"{param_pair[1]} CTF slope", fontsize=18)
+        axes[i].set_xlabel(f"{param_pair[0]} CTF slope", fontsize=17)
+        axes[i].set_ylabel(f"{param_pair[1]} CTF slope", fontsize=17)
         axes[i].legend(
-            title="Task", loc="upper left", fontsize=12, title_fontsize=18
+            title="Task", loc="upper left", fontsize=12, title_fontsize=17
         )
         sns.despine(ax=axes[i])
 
