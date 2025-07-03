@@ -48,6 +48,8 @@ def plot_model_fit(
     save_fname=None,
     plot_timings=True,
     plot_errorbars=False,
+    plot_sig=True,
+    zscore=True,
     ax=None,
 ):
     """Plot model fits across time for multiple parameters.
@@ -73,7 +75,8 @@ def plot_model_fit(
         Whether to plot task timings.
     plot_errorbars : bool (default: False)
         Whether to include error bars in the plot.
-
+    zscore : bool (default: True)
+        Whether to z-score the model output on the baseline period.
     ax : matplotlib.axes.Axes (default: None)
         Axes on which to plot.
     """
@@ -85,6 +88,9 @@ def plot_model_fit(
         details["name"]: details["color"]
         for details in params_to_plot.values()
     }
+
+    # Keep only model fits for parameters that are to be plotted
+    model_fits = {param: model_fits[param] for param in param_names.keys()}
 
     # Make empty list for model fit DataFrames
     model_fits_dfs = []
@@ -107,25 +113,32 @@ def plot_model_fit(
     model_fits_big_df = pd.concat(model_fits_dfs).reset_index(drop=True)
 
     # Z-score model fits using baseline period
-    model_fits_big_df, new_model_output_name = zscore_model_fits(
-        model_fits_big_df,
-        model_output_name=model_output_name,
-    )
+    new_model_output_name = model_output_name
+    if zscore:
+        model_fits_big_df, new_model_output_name = zscore_model_fits(
+            model_fits_big_df,
+            model_output_name=model_output_name,
+        )
 
     # Compute times that are significantly different from zero
     sig_times = {}
     for param in model_fits_big_df["Parameter"].unique():
         df_p = model_fits_big_df[model_fits_big_df["Parameter"] == param]
         times = np.sort(df_p["Time (s)"].unique())
-        # Compute one-sample t-test at each time point
-        pvals = [
-            stats.ttest_1samp(
-                df_p[df_p["Time (s)"] == t][new_model_output_name], 0
-            )[1]
-            for t in times
-        ]
-        # FDR correction
-        reject, _, _, _ = multipletests(pvals, alpha=sig_pval, method="fdr_bh")
+
+        # one-sample, one-tailed t-test for each time point
+        pvals_one = []
+        for t in times:
+            vals = df_p[df_p["Time (s)"] == t][new_model_output_name]
+            t_stat, p_two = stats.ttest_1samp(vals, 0)
+            # convert to one‐tailed (testing “mean > 0”)
+            p_one = p_two / 2 if t_stat > 0 else 1.0
+            pvals_one.append(p_one)
+
+        # FDR‐correct those one‐tailed p‐values
+        reject, _, _, _ = multipletests(
+            pvals_one, alpha=sig_pval, method="fdr_bh"
+        )
         sig_times[param] = times[reject]
 
     # Plot model fit time course for each parameter
@@ -143,26 +156,33 @@ def plot_model_fit(
         ax=ax,
     )
 
-    # Plot significant times as dots
-    y_min = model_fits_big_df[new_model_output_name].min()
-    y_offset = (model_fits_big_df[new_model_output_name].max() - y_min) * 0.05
+    # get the true plotted y-limits
+    y_lower, y_upper = ax.get_ylim()
+    y_range = y_upper - y_lower
 
-    # For each parameter, stagger rows of dots downward
-    params_list = list(sig_times.keys())
-    for i, param in enumerate(params_list):
-        times_sig = sig_times[param]
-        if len(times_sig) == 0:
-            continue
-        y_row = y_min - (i + 1) * y_offset
-        ax.scatter(
-            times_sig,
-            [y_row] * len(times_sig),
-            color=palette[param],
-            marker="o",
-            s=40,
-            label=None,
-            clip_on=False,
-        )
+    # reserve 5% of the plotted span for all your sig dots
+    if plot_sig:
+        total_frac = 0.1
+        total_space = y_range * total_frac
+
+        params_list = list(sig_times.keys())
+        n_params = len(params_list)
+        y_offset = total_space / n_params
+
+        for i, param in enumerate(params_list):
+            times_sig = sig_times[param]
+            if len(times_sig) == 0:
+                continue
+            # stagger each parameter’s row below the actual plotted bottom
+            y_row = y_lower - (i + 1) * y_offset
+
+            ax.scatter(
+                times_sig,
+                [y_row] * len(times_sig),
+                color=palette[param],
+                marker="o",
+                s=40,
+            )
 
     # Plot aesthetics
     xmin = model_fits_big_df["Time (s)"].min()
@@ -204,7 +224,7 @@ def plot_model_fit(
         y=1.08,
     )
     ax.set_xlabel("Time (s)", size=28)
-    ax.set_ylabel(new_model_output_name, size=28)
+    ax.set_ylabel(new_model_output_name, size=26)
     ax.tick_params(labelsize=20)
     sns.despine(ax=ax)
 
@@ -221,10 +241,12 @@ def plot_model_fit_time_courses(
     params_to_plot=params.PARAMS_TO_PLOT,
     name="",
     plt_errorbars=False,
+    plt_sig=True,
     model_output_name="CTF slope",
     subjects_by_task=params.SUBJECTS_BY_TASK,
     fig_dir=params.FIG_DIR,
     task_timings=params.TASK_TIMINGS,
+    zscore=True,
     save_fname="fig4_compare_model_fits_across_tasks.pdf",
 ):
     """Plot model fit time courses for total power and parameters from spectral
@@ -259,7 +281,7 @@ def plot_model_fit_time_courses(
 
     # Create a GridSpec with one row and the number of tasks as columns
     num_tasks = len(subjects_by_task)
-    fig = plt.figure(figsize=(24, 36), constrained_layout=True)
+    fig = plt.figure(figsize=(24, 30), constrained_layout=True)
     gs = gridspec.GridSpec(num_tasks // 2 + 1, 2, figure=fig)
 
     # Plot model fit time courses for parameters
@@ -295,8 +317,10 @@ def plot_model_fit_time_courses(
                 params_to_plot=params_to_plot,
                 plot_timings=plt_timings,
                 plot_errorbars=plt_errorbars,
+                plot_sig=plt_sig,
                 ax=ax,
                 model_output_name=model_output_name,
+                zscore=zscore,
             )
 
             # Add axis to list of axes
