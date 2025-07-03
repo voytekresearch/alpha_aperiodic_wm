@@ -5,9 +5,12 @@ import numpy as np
 import os
 import pandas as pd
 import seaborn as sns
+from scipy import stats
+from statsmodels.stats.multitest import multipletests
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from train_and_test_model import fit_model_desired_params
+from fig2_analysis_pipeline import add_letter_labels
 import params
 
 
@@ -39,11 +42,14 @@ def plot_model_fit(
     t_arrays,
     task_num,
     task_timings,
+    sig_pval=0.05,
     params_to_plot=params.PARAMS_TO_PLOT,
     model_output_name="CTF slope",
     save_fname=None,
     plot_timings=True,
     plot_errorbars=False,
+    plot_sig=True,
+    zscore=True,
     ax=None,
 ):
     """Plot model fits across time for multiple parameters.
@@ -69,6 +75,8 @@ def plot_model_fit(
         Whether to plot task timings.
     plot_errorbars : bool (default: False)
         Whether to include error bars in the plot.
+    zscore : bool (default: True)
+        Whether to z-score the model output on the baseline period.
     ax : matplotlib.axes.Axes (default: None)
         Axes on which to plot.
     """
@@ -80,6 +88,9 @@ def plot_model_fit(
         details["name"]: details["color"]
         for details in params_to_plot.values()
     }
+
+    # Keep only model fits for parameters that are to be plotted
+    model_fits = {param: model_fits[param] for param in param_names.keys()}
 
     # Make empty list for model fit DataFrames
     model_fits_dfs = []
@@ -102,10 +113,33 @@ def plot_model_fit(
     model_fits_big_df = pd.concat(model_fits_dfs).reset_index(drop=True)
 
     # Z-score model fits using baseline period
-    model_fits_big_df, new_model_output_name = zscore_model_fits(
-        model_fits_big_df,
-        model_output_name=model_output_name,
-    )
+    new_model_output_name = model_output_name
+    if zscore:
+        model_fits_big_df, new_model_output_name = zscore_model_fits(
+            model_fits_big_df,
+            model_output_name=model_output_name,
+        )
+
+    # Compute times that are significantly different from zero
+    sig_times = {}
+    for param in model_fits_big_df["Parameter"].unique():
+        df_p = model_fits_big_df[model_fits_big_df["Parameter"] == param]
+        times = np.sort(df_p["Time (s)"].unique())
+
+        # one-sample, one-tailed t-test for each time point
+        pvals_one = []
+        for t in times:
+            vals = df_p[df_p["Time (s)"] == t][new_model_output_name]
+            t_stat, p_two = stats.ttest_1samp(vals, 0)
+            # convert to one‐tailed (testing “mean > 0”)
+            p_one = p_two / 2 if t_stat > 0 else 1.0
+            pvals_one.append(p_one)
+
+        # FDR‐correct those one‐tailed p‐values
+        reject, _, _, _ = multipletests(
+            pvals_one, alpha=sig_pval, method="fdr_bh"
+        )
+        sig_times[param] = times[reject]
 
     # Plot model fit time course for each parameter
     if ax is None:
@@ -122,35 +156,67 @@ def plot_model_fit(
         ax=ax,
     )
 
+    # get the true plotted y-limits
+    y_lower, y_upper = ax.get_ylim()
+    y_range = y_upper - y_lower
+
+    # reserve 5% of the plotted span for all your sig dots
+    if plot_sig:
+        total_frac = 0.1
+        total_space = y_range * total_frac
+
+        params_list = list(sig_times.keys())
+        n_params = len(params_list)
+        y_offset = total_space / n_params
+
+        for i, param in enumerate(params_list):
+            times_sig = sig_times[param]
+            if len(times_sig) == 0:
+                continue
+            # stagger each parameter’s row below the actual plotted bottom
+            y_row = y_lower - (i + 1) * y_offset
+
+            ax.scatter(
+                times_sig,
+                [y_row] * len(times_sig),
+                color=palette[param],
+                marker="o",
+                s=40,
+            )
+
     # Plot aesthetics
+    xmin = model_fits_big_df["Time (s)"].min()
+    xmax = model_fits_big_df["Time (s)"].max()
+    ax.set_xlim(xmin, xmax)
     legend = ax.legend(loc="upper left", bbox_to_anchor=(1.1, 1))
     if task_num != 0 or not save_fname:
         legend.remove()
     _, _, _, ymax = ax.axis()
+
+    # Plot task timings as shaded regions
     if plot_timings:
-        ax.axvline(0.0, c="gray", ls="--")
-        ax.text(0.03, ymax, "Stimulus onset", va="bottom", ha="right", size=24)
-        ax.axvline(task_timings[0], c="gray", ls="--")
-        offset_x, offset_ha = task_timings[0] + 0.03, "left"
-        if task_timings[0] > 0.75:
-            offset_x, offset_ha = task_timings[0], "center"
-        ax.text(
-            offset_x,
-            ymax,
-            "Stimulus offset",
-            va="bottom",
-            ha=offset_ha,
-            size=24,
+        # Shade the encoding period (stimulus onset to offset)
+        ax.axvspan(
+            0.0,
+            task_timings[0],
+            color="black",
+            alpha=0.2,
+            label="Encoding period",
         )
-        ax.axvline(task_timings[1], c="gray", ls="--")
-        ax.text(
+
+        # Shade the delay period (stimulus offset to the end of the plot)
+        ax.axvspan(
+            task_timings[0],
             task_timings[1],
-            ymax,
-            "Free response",
-            va="bottom",
-            ha="center",
-            size=24,
+            color="gray",
+            alpha=0.2,
+            label="Delay period",
         )
+
+    # Set plot limits and aesthetics
+    ax.set_xlim(None, task_timings[1])
+
+    # Set plot title and labels
     ax.set_title(
         f"Task {task_num + 1} (n = {n})",
         fontsize=48,
@@ -158,7 +224,7 @@ def plot_model_fit(
         y=1.08,
     )
     ax.set_xlabel("Time (s)", size=28)
-    ax.set_ylabel(new_model_output_name, size=28)
+    ax.set_ylabel(new_model_output_name, size=26)
     ax.tick_params(labelsize=20)
     sns.despine(ax=ax)
 
@@ -174,12 +240,14 @@ def plot_model_fit_time_courses(
     param_sets=None,
     params_to_plot=params.PARAMS_TO_PLOT,
     name="",
-    title="",
     plt_errorbars=False,
+    plt_sig=True,
     model_output_name="CTF slope",
     subjects_by_task=params.SUBJECTS_BY_TASK,
     fig_dir=params.FIG_DIR,
     task_timings=params.TASK_TIMINGS,
+    zscore=True,
+    save_fname="fig4_compare_model_fits_across_tasks.pdf",
 ):
     """Plot model fit time courses for total power and parameters from spectral
     parameterization.
@@ -196,8 +264,6 @@ def plot_model_fit_time_courses(
         Dictionary containing metadata (e.g., color, label) for parameters to plot.
     name : str (default: "")
         Name to append to saved figure file.
-    title : str (default: "")
-        Title of the figure.
     plt_errorbars : bool (default: False)
         Whether to include error bars in the plots.
     model_output_name : str (default: "CTF slope")
@@ -215,10 +281,11 @@ def plot_model_fit_time_courses(
 
     # Create a GridSpec with one row and the number of tasks as columns
     num_tasks = len(subjects_by_task)
-    fig = plt.figure(figsize=(24, 36), constrained_layout=True)
+    fig = plt.figure(figsize=(24, 30), constrained_layout=True)
     gs = gridspec.GridSpec(num_tasks // 2 + 1, 2, figure=fig)
 
     # Plot model fit time courses for parameters
+    axes = []
     for task_num in range(len(subjects_by_task)):
         model_fits_one_task = {
             k: v[task_num] for k, v in model_fits_all_params.items()
@@ -250,9 +317,14 @@ def plot_model_fit_time_courses(
                 params_to_plot=params_to_plot,
                 plot_timings=plt_timings,
                 plot_errorbars=plt_errorbars,
+                plot_sig=plt_sig,
                 ax=ax,
                 model_output_name=model_output_name,
+                zscore=zscore,
             )
+
+            # Add axis to list of axes
+            axes.append(ax)
 
     # Get legend handles and labels from the last axis
     handles, labels = ax.get_legend_handles_labels()
@@ -264,9 +336,12 @@ def plot_model_fit_time_courses(
     ax_legend.axis("off")
     ax_legend.legend(handles, labels, loc="center", fontsize=36)
 
+    # Add letter labels to subplots
+    add_letter_labels(axes, size=64)
+
     # Save figure
     os.makedirs(fig_dir, exist_ok=True)
-    model_fits_fname = f"{fig_dir}/fig3_compare_model_fits_across_tasks.png"
+    model_fits_fname = f"{fig_dir}/{save_fname}"
     if len(name) > 0:
         model_fits_fname = model_fits_fname.replace(".", f"_{name}.")
     plt.savefig(model_fits_fname, dpi=300)
@@ -286,7 +361,6 @@ if __name__ == "__main__":
     plot_model_fit_time_courses(
         ctf_slopes,
         t_arrays,
-        title="All parameters",
         plt_errorbars=True,
         name="iem",
     )

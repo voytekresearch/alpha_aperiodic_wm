@@ -11,8 +11,9 @@ if __name__ == "__main__":
     # Set seed
     np.random.seed(params.SEED)
 
-    # Fit IEM model with desired parameters
+    # Fit IEM model with desired parameters on distractors
     ctf_slopes, t_arrays = fit_model_desired_params(
         sp_params=["total_power", "linOscAUC", "exponent"],
+        distractors=True,
         verbose=False,
     )

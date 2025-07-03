@@ -163,16 +163,16 @@ PARAMS_TO_PLOT = {
     "total_power": {
         "dir": TOTAL_POWER_DIR,
         "name": "Alpha total power",
-        "color": "#b2abd2",
+        "color": "#489ded",
     },
     "linOscAUC": {
         "dir": SPARAM_DIR,
         "name": "Alpha oscillatory power",
-        "color": "#5e3c99",
+        "color": "#7a65b9",
     },
     "exponent": {
         "dir": SPARAM_DIR,
         "name": "Aperiodic exponent",
-        "color": "#e66101",
+        "color": "#2e2e2e",
     },
 }
