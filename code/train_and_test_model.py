@@ -467,7 +467,7 @@ def train_and_test_one_subj(
     return
 
 
-def _get_subject_list(
+def get_subject_list(
     param, param_dir, subjects_by_task=params.SUBJECTS_BY_TASK
 ):
     # Get all subject IDs that were processed
@@ -518,7 +518,7 @@ def train_and_test_all_subjs(
     """
     # Get all subject IDs for IEMs, excluding those that were not
     # processed or excluded
-    subjs = _get_subject_list(param, param_dir)
+    subjs = get_subject_list(param, param_dir)
 
     # Process each subject's data
     for subj in subjs:
@@ -577,7 +577,7 @@ def load_all_model_fits(
     """Load model fits for all subjects."""
     # Get all subject IDs for IEMs, excluding those that were not
     # processed or excluded
-    subjs = _get_subject_list(param, param_dir)
+    subjs = get_subject_list(param, param_dir)
 
     # Collate outputs from model fitting across subjects
     mean_model_fits = [[] for _ in range(len(subjects_by_task))]
