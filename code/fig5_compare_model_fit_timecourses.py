@@ -324,12 +324,12 @@ def compare_model_fits_across_params(
         sns.despine(ax=axes[i])
 
         # Plot identity line for comparison
+        xmin, xmax = axes[i].get_xlim()
+        ymin, ymax = axes[i].get_ylim()
+        low = max(xmin, ymin)
+        high = min(xmax, ymax)
         axes[i].plot(
-            axes[i].get_xlim(),
-            axes[i].get_ylim(),
-            ls="--",
-            c=".3",
-            label="Identity line",
+            [low, high], [low, high], ls="--", c=".3", label="Identity line"
         )
 
     # Adjust layout and optionally save the figure
@@ -353,12 +353,19 @@ def compare_model_fit_timecourses(
     fig = plt.figure(figsize=(7 * cols, 5 * rows))
     gs = fig.add_gridspec(rows, cols)
 
-    # Plot model fits across time windows
+    # Create subplots for each time window
     axes_windows = [
         fig.add_subplot(gs[row, col])
         for idx in range(len(ctf_slopes))
         for row, col in [divmod(idx, cols)]
     ]
+    # Share y-axes across all subplots in the first row
+    first_row_axes = axes_windows[:cols]
+    anchor = first_row_axes[0]
+    for ax in first_row_axes[1:]:
+        ax.sharey(anchor)
+
+    # Plot model fits across time windows
     model_fits_df, output_name = compare_model_fits_across_windows(
         ctf_slopes,
         t_arrays,
